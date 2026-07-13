@@ -33,11 +33,11 @@ http:
 
 script-providers:
   WLOC.Location:
-    url: https://raw.githubusercontent.com/lingmacker/wloc/refs/heads/main/dist/wloc.js
+    url: https://raw.githubusercontent.com/lingmacker/wloc/refs/heads/main/src/wloc.js
     interval: 86400
   WLOC.Prepare:
-    url: https://raw.githubusercontent.com/lingmacker/wloc/refs/heads/main/dist/wloc.js
+    url: https://raw.githubusercontent.com/lingmacker/wloc/refs/heads/main/src/wloc.js
     interval: 86400
   WLOC.Settings:
-    url: https://raw.githubusercontent.com/lingmacker/wloc/refs/heads/main/dist/wloc-settings.js
+    url: https://raw.githubusercontent.com/lingmacker/wloc/refs/heads/main/src/wloc-settings.js
     interval: 86400

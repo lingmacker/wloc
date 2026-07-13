@@ -51,8 +51,8 @@ test("Quantumult X config binds WLOC prepare and binary response rules", () => {
   assert.ok(response);
   assertHostPattern(prepare);
   assertHostPattern(response);
-  assert.match(prepare, /dist\/wloc\.js/);
-  assert.match(response, /dist\/wloc\.js/);
+  assert.match(prepare, /src\/wloc\.js/);
+  assert.match(response, /src\/wloc\.js/);
   assertMitmHosts(section(source, "mitm"));
 });
 
@@ -72,8 +72,8 @@ for (const [name, preparePrefix, responsePrefix] of [
     assertHostPattern(response);
     assert.match(prepare, /requires-body=(?:0|false)/);
     assert.match(response, /binary-(?:body-)?mode=(?:1|true)/);
-    assert.match(prepare, /dist\/wloc\.js/);
-    assert.match(response, /dist\/wloc\.js/);
+    assert.match(prepare, /src\/wloc\.js/);
+    assert.match(response, /src\/wloc\.js/);
     assertMitmHosts(section(source, "MITM"));
   });
 }
@@ -92,7 +92,7 @@ test("Stash config binds prepare and binary response providers", () => {
   assertHostPattern(responsePattern[1]);
   assert.match(source, /name: WLOC\.Prepare\n\s+type: request\n\s+require-body: false/);
   assert.match(source, /name: WLOC\.Location\n\s+type: response\n\s+require-body: true\n\s+binary-mode: true/);
-  assert.match(source, /WLOC\.Prepare:\n\s+url: .*dist\/wloc\.js/);
-  assert.match(source, /WLOC\.Location:\n\s+url: .*dist\/wloc\.js/);
+  assert.match(source, /WLOC\.Prepare:\n\s+url: .*src\/wloc\.js/);
+  assert.match(source, /WLOC\.Location:\n\s+url: .*src\/wloc\.js/);
   assertMitmHosts(source.slice(source.indexOf("mitm:"), source.indexOf("script:")));
 });

@@ -1,7 +1,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 
-const { resolveLocationState } = require("../dist/wloc.js");
+const { resolveLocationState } = require("../src/wloc.js");
 
 const METERS_PER_EQUATOR_DEGREE = 111195.080234;
 

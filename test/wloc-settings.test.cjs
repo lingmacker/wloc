@@ -3,7 +3,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const vm = require("node:vm");
 
-const script = fs.readFileSync(require.resolve("../dist/wloc-settings.js"), "utf8");
+const script = fs.readFileSync(require.resolve("../src/wloc-settings.js"), "utf8");
 
 function runSettings(url, values, now = Date.now()) {
   let response;

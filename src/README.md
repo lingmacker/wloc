@@ -1,10 +1,9 @@
-# 可读编译产物
+# 发布脚本源码
 
-这里保存 `dist/` 中两个发布脚本的格式化副本，用于审计和理解行为。
+这里保存两个可直接发布的脚本，用于维护、审计和理解行为。
 
 - `wloc.js`：预处理 WLOC 请求、读取目标设置、解压 WLOC 响应、扫描 protobuf、改写 Wi-Fi/基站位置并返回响应。
 - `wloc-settings.js`：处理 `save`、`query`、`clear` 三种设置请求，并读写 `wloc_settings`。
-- `dist/` 仍是实际发布文件，不应直接手工维护。
 
 ## 可确认的压缩符号
 
@@ -59,11 +58,4 @@
 
 ## 注意
 
-格式化只能恢复代码结构，无法恢复构建前的原始变量名、模块边界、注释或源码文件划分。这里没有声称这些文件是原始源码；它们与当前编译产物保持语法行为等价。
-
-发布文件使用 Terser 从可读版本生成：
-
-```sh
-npx --yes terser src/wloc.js --compress --mangle --comments '/^!|Build/' --ecma 2022 --output dist/wloc.js
-npx --yes terser src/wloc-settings.js --compress --mangle --comments '/^!|Build/' --ecma 2022 --output dist/wloc-settings.js
-```
+这些文件是模块配置和测试直接引用的发布源文件。

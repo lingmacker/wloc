@@ -4,8 +4,8 @@ const { gzipSync } = require("node:zlib");
 const fs = require("node:fs");
 const vm = require("node:vm");
 
-const { rewriteWlocResponse } = require("../dist/wloc.js");
-const runtimeScript = fs.readFileSync(require.resolve("../dist/wloc.js"), "utf8");
+const { rewriteWlocResponse } = require("../src/wloc.js");
+const runtimeScript = fs.readFileSync(require.resolve("../src/wloc.js"), "utf8");
 
 async function runQuantumultX({ argument = "", request, response, storedSettings }) {
   let completed;
