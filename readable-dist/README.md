@@ -1,0 +1,47 @@
+# 可读编译产物
+
+这里保存 `dist/` 中两个发布脚本的格式化副本，用于审计和理解行为。
+
+- `wloc.js`：读取目标设置、解压 WLOC 响应、扫描 protobuf、改写 Wi-Fi/基站位置并返回响应。
+- `wloc-settings.js`：处理 `save`、`query`、`clear` 三种设置请求，并读写 `wloc_settings`。
+- `dist/` 仍是实际发布文件，不应直接手工维护。
+
+## 可确认的压缩符号
+
+两个文件开头的主要符号来自同一套跨平台代理脚本运行时：
+
+- `e`：当前运行环境名称。
+- `t`：日志工具。
+- `a`：对象路径与合并工具。
+- `r`（`wloc.js`）/`s`（设置脚本）：查询参数解析工具。
+- `o`（`wloc.js`）/`c`（设置脚本）：跨平台持久化存储适配器。
+- `i`（`wloc.js`）/`o`（设置脚本）：跨平台完成响应的适配函数。
+
+## wloc.js 核心函数映射
+
+- `Ae`：读取 protobuf varint。
+- `$e`：编码 protobuf varint。
+- `Se`：拼接字节数组。
+- `Re`：解析一层 protobuf 字段。
+- `Te`：编码单个 protobuf 字段。
+- `Oe`：改写位置消息的纬度、经度和精度。
+- `Ne`：识别并改写 Wi-Fi 记录。
+- `je`：改写基站记录。
+- `Le`：遍历 WLOC protobuf 顶层消息。
+- `Ue`：处理带长度前缀的 WLOC 数据帧。
+- `tryParseArpcEnvelope` / `tryPatchArpcEnvelope`：优先识别并重建结构化 ARPC 封包。
+- `Ie`：依次尝试 ARPC、多个帧偏移，并在必要时回退为原始 protobuf 扫描。
+- `Me`：检测 gzip。
+- `De`：执行完整响应改写流程。
+- `Pe`：合并模块参数和持久化设置，决定改写或透传。
+
+## 注意
+
+格式化只能恢复代码结构，无法恢复构建前的原始变量名、模块边界、注释或源码文件划分。这里没有声称这些文件是原始源码；它们与当前编译产物保持语法行为等价。
+
+发布文件使用 Terser 从可读版本生成：
+
+```sh
+npx --yes terser readable-dist/wloc.js --compress --mangle --comments '/^!|Build/' --ecma 2022 --output dist/wloc.js
+npx --yes terser readable-dist/wloc-settings.js --compress --mangle --comments '/^!|Build/' --ecma 2022 --output dist/wloc-settings.js
+```

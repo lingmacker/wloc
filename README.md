@@ -120,6 +120,10 @@ https://raw.githubusercontent.com/Yu9191/wloc/refs/heads/main/modules/wloc.modul
 | longitude | 目标经度(在线选点优先) | null (透传) |
 | latitude | 目标纬度(在线选点优先) | null (透传) |
 | accuracy | 精度(米) | 25 |
+| altitude | 海拔(可选，留空保留原值) | null |
+| verticalAccuracy | 垂直精度(可选) | null |
+| motionActivityType | 运动类型元数据(可选) | null |
+| motionActivityConfidence | 运动置信度元数据(可选) | null |
 | logLevel | 日志级别 | info |
 
 优先级: 在线选点储存 > 模块参数 > 默认值
