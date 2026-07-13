@@ -10,9 +10,6 @@ const hosts = [
   "bluedot.is.autonavi.com",
   "bluedot.is.autonavi.com.gds.alibabadns.com",
 ];
-const amapPattern = String.raw`bluedot\.is\.autonavi\.com(?:\.gds\.alibabadns\.com)?`;
-const escapedAmapFragment = String.raw`bluedot\.is\.autonavi\.com(?:\.gds\.alibabadns\.com)?`;
-
 function readModule(name) {
   return fs.readFileSync(path.join(moduleDir, name), "utf8");
 }
@@ -23,10 +20,22 @@ function section(source, name) {
   return match[1];
 }
 
+function extractRulePattern(line) {
+  const named = line.match(/pattern="?([^",\s]+)"?/);
+  if (named) return named[1];
+  const directive = line.match(/^(?:http-request |http-response )([^\s]+)/);
+  if (directive) return directive[1];
+  return line.split(" url ")[0].trim();
+}
+
 function assertHostPattern(line) {
-  assert.ok(line.includes(escapedAmapFragment));
-  assert.match(line, /gs-loc/);
-  assert.ok(line.includes(String.raw`\/clls\/wloc`));
+  const rule = new RegExp(extractRulePattern(line));
+  for (const host of hosts)
+    assert.equal(
+      rule.test(`https://${host}/clls/wloc`),
+      true,
+      `rule does not match ${host}`,
+    );
 }
 
 function assertMitmHosts(source) {
@@ -71,10 +80,19 @@ for (const [name, preparePrefix, responsePrefix] of [
 
 test("Stash config binds prepare and binary response providers", () => {
   const source = readModule("wloc.stoverride");
+  const preparePattern = source.match(
+    /- match: ([^\n]+)\n\s+name: WLOC\.Prepare/,
+  );
+  const responsePattern = source.match(
+    /- match: ([^\n]+)\n\s+name: WLOC\.Location/,
+  );
+  assert.ok(preparePattern);
+  assert.ok(responsePattern);
+  assertHostPattern(preparePattern[1]);
+  assertHostPattern(responsePattern[1]);
   assert.match(source, /name: WLOC\.Prepare\n\s+type: request\n\s+require-body: false/);
   assert.match(source, /name: WLOC\.Location\n\s+type: response\n\s+require-body: true\n\s+binary-mode: true/);
   assert.match(source, /WLOC\.Prepare:\n\s+url: .*dist\/wloc\.js/);
   assert.match(source, /WLOC\.Location:\n\s+url: .*dist\/wloc\.js/);
-  assert.equal((source.match(new RegExp(amapPattern, "g")) || []).length >= 2, true);
   assertMitmHosts(source.slice(source.indexOf("mitm:"), source.indexOf("script:")));
 });
