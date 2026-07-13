@@ -692,7 +692,10 @@ let d;
 if ((t.debug(`[wloc-settings] url=${i}, action=${u}`), "query" === u))
   try {
     const e = c.getItem(n);
-    e && "object" == typeof e && e.longitude && e.latitude
+    e &&
+    "object" == typeof e &&
+    Number.isFinite(Number(e.longitude)) &&
+    Number.isFinite(Number(e.latitude))
       ? ((d = {
           success: !0,
           longitude: e.longitude,
@@ -703,11 +706,33 @@ if ((t.debug(`[wloc-settings] url=${i}, action=${u}`), "query" === u))
           motionActivityType: e.motionActivityType ?? null,
           motionActivityConfidence: e.motionActivityConfidence ?? null,
           updatedAt: e.updatedAt || null,
+          settings: e,
         }),
         t.debug(`[wloc-settings] 查询: ${e.longitude}, ${e.latitude}`))
       : (d = { success: !1, error: "无已保存的坐标" });
   } catch (e) {
     d = { success: !1, error: e.message || "读取失败" };
+  }
+else if (["pause", "resume", "stop"].includes(u))
+  try {
+    const e = c.getItem(n);
+    if (!e || "object" != typeof e || "route" !== e.mode)
+      throw new Error("无运行中的路线");
+    const a = Date.now();
+    if ("pause" === u && "running" === e.status)
+      ((e.status = "paused"), (e.pausedAt = a));
+    else if ("resume" === u && ["paused", "stopped"].includes(e.status)) {
+      const t = "paused" === e.status ? e.pausedAt : e.stoppedAt;
+      Number.isFinite(Number(t)) &&
+        (e.startedAt = Number(e.startedAt) + (a - Number(t)));
+      ((e.status = "running"), (e.pausedAt = null), (e.stoppedAt = null));
+    } else if ("stop" === u)
+      ((e.status = "stopped"), (e.stoppedAt = a));
+    ((e.updatedAt = new Date(a + 288e5).toISOString().replace("Z", "+08:00")),
+      c.setItem(n, e),
+      (d = { success: !0, settings: e }));
+  } catch (e) {
+    d = { success: !1, error: e.message || "路线控制失败" };
   }
 else if ("clear" === u)
   try {
@@ -721,6 +746,8 @@ else if ("clear" === u)
 else {
   const e = parseFloat(l.get("lon") || l.get("longitude") || "0"),
     a = parseFloat(l.get("lat") || l.get("latitude") || "0"),
+    hasLongitude = l.has("lon") || l.has("longitude"),
+    hasLatitude = l.has("lat") || l.has("latitude"),
     s = parseInt(l.get("acc") || l.get("accuracy") || "25", 10),
     optionalInteger = (...e) => {
       for (const t of e) {
@@ -736,8 +763,69 @@ else {
     verticalAccuracy = optionalInteger("verticalAccuracy"),
     motionActivityType = optionalInteger("motionActivityType"),
     motionActivityConfidence = optionalInteger("motionActivityConfidence");
-  if (e && a) {
+  if ("route" === l.get("mode")) {
+    try {
+      const e = JSON.parse(l.get("route") || "[]"),
+        profile = ["walking", "cycling", "driving"].includes(l.get("profile"))
+          ? l.get("profile")
+          : "custom",
+        profileDefaults = {
+          walking: { speed: 1.4, accuracy: 12 },
+          cycling: { speed: 4.2, accuracy: 15 },
+          driving: { speed: 13.9, accuracy: 25 },
+        },
+        a = Number(l.get("speed") || profileDefaults[profile]?.speed),
+        start = e[0];
+      if (!Array.isArray(e) || e.length < 2) throw new Error("路线至少需要两个点");
+      if (!Number.isFinite(a) || a <= 0) throw new Error("路线速度必须大于 0");
+      if (!start || !Number.isFinite(Number(start.longitude)) || !Number.isFinite(Number(start.latitude)))
+        throw new Error("路线起点无效");
+      const r = {
+        mode: "route",
+        route: e,
+        profile,
+        speed: a,
+        loop: ["true", "1", "yes", "on"].includes(
+          String(l.get("loop") || "false").toLowerCase(),
+        ),
+        status: "running",
+        startedAt: Date.now(),
+        pausedAt: null,
+        stoppedAt: null,
+        longitude: Number(start.longitude),
+        latitude: Number(start.latitude),
+        accuracy: l.has("acc") || l.has("accuracy")
+          ? s
+          : (profileDefaults[profile]?.accuracy ?? 25),
+        altitude,
+        verticalAccuracy,
+        motionActivityType,
+        motionActivityConfidence,
+        diagnostics: ["true", "1", "yes", "on"].includes(
+          String(l.get("diagnostics") || "false").toLowerCase(),
+        ),
+        updatedAt: new Date(Date.now() + 288e5)
+          .toISOString()
+          .replace("Z", "+08:00"),
+      };
+      c.setItem(n, r)
+        ? (d = { success: !0, settings: r })
+        : (d = { success: !1, error: "Storage.setItem 返回 false" });
+    } catch (e) {
+      d = { success: !1, error: e.message || "路线保存失败" };
+    }
+  } else if (
+    hasLongitude &&
+    hasLatitude &&
+    Number.isFinite(e) &&
+    Number.isFinite(a) &&
+    e >= -180 &&
+    e <= 180 &&
+    a >= -90 &&
+    a <= 90
+  ) {
     const r = {
+      mode: "static",
       longitude: e,
       latitude: a,
       accuracy: s,
@@ -745,6 +833,9 @@ else {
       verticalAccuracy,
       motionActivityType,
       motionActivityConfidence,
+      diagnostics: ["true", "1", "yes", "on"].includes(
+        String(l.get("diagnostics") || "false").toLowerCase(),
+      ),
       updatedAt: new Date(Date.now() + 288e5)
         .toISOString()
         .replace("Z", "+08:00"),
@@ -760,6 +851,7 @@ else {
             verticalAccuracy,
             motionActivityType,
             motionActivityConfidence,
+            settings: r,
           }),
           t.info(`[wloc-settings] 已保存: ${e}, ${a}`))
         : ((d = { success: !1, error: "Storage.setItem 返回 false" }),

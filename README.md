@@ -98,6 +98,24 @@ https://raw.githubusercontent.com/Yu9191/wloc/refs/heads/main/modules/wloc.modul
 </details>
 
 <details>
+<summary><b>路线模拟</b></summary>
+
+在线选点页面可以创建一条随时间移动的路线：
+
+1. 在地图选择位置，点击「添加当前点」，依次加入至少两个路线点
+2. 选择步行、骑行、驾车档案，或填写自定义速度
+3. 按需开启循环和诊断模式
+4. 点击「启动路线」；之后可暂停、继续或停止
+
+路线位置在每次 WLOC 请求到达时根据当前时间计算，不依赖后台定时任务。Wi-Fi 和字段 22/24 的蜂窝基站会使用同一个时间点的位置状态。
+
+运动档案只提供保守的默认速度与水平精度：步行 1.4m/s、骑行 4.2m/s、驾车 13.9m/s。由于 protobuf 字段 11/12 的枚举语义尚未得到可靠 schema 或真机样本确认，档案不会自动填写运动类型和置信度。
+
+诊断模式只在改写后的 HTTP 响应头中加入封包类型、Wi-Fi/基站数量和路线状态，不输出 BSSID、基站标识或原始响应。
+
+</details>
+
+<details>
 <summary><b>工作原理</b></summary>
 
 ```
@@ -124,6 +142,7 @@ https://raw.githubusercontent.com/Yu9191/wloc/refs/heads/main/modules/wloc.modul
 | verticalAccuracy | 垂直精度(可选) | null |
 | motionActivityType | 运动类型元数据(可选) | null |
 | motionActivityConfidence | 运动置信度元数据(可选) | null |
+| diagnostics | 输出不含设备标识的诊断响应头 | false |
 | logLevel | 日志级别 | info |
 
 优先级: 在线选点储存 > 模块参数 > 默认值

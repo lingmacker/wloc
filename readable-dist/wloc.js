@@ -2504,9 +2504,10 @@ async function De(e, a, r) {
       return [];
     })(a.bodyBytes || a.rawBody || a.body);
     if (!e.length) return (t.warn("[wloc] 无二进制 body，跳过"), a);
+    const o = resolveLocationState(r, Date.now());
     if (
       (t.debug(`[wloc] input length=${e.length} gzip=${Me(e)}`),
-      null == r.longitude || null == r.latitude)
+      null == o.longitude || null == o.latitude)
     )
       return (
         t.info("[wloc] 透传模式：未设置坐标，不修改响应（恢复真实定位）"),
@@ -2514,22 +2515,27 @@ async function De(e, a, r) {
       );
     let n = e;
     Me(e) && (n = Array.from(Ee(new Uint8Array(e))));
-    const { data: i, stats: o } = Ie(n, r),
-      s = new Uint8Array(i);
+    const { data: i, stats: s, frameKind: c } = Ie(n, o),
+      l = new Uint8Array(i);
     return (
-      (a.body = s),
-      (a.bodyBytes = s),
-      (a.rawBody = s),
+      (a.body = l),
+      (a.bodyBytes = l),
+      (a.rawBody = l),
       a.headers &&
         (delete a.headers["Content-Encoding"],
         delete a.headers["content-encoding"],
         delete a.headers["Transfer-Encoding"],
         delete a.headers["transfer-encoding"],
-        (a.headers["Content-Length"] = String(s.length))),
+        (a.headers["Content-Length"] = String(l.length)),
+        o.diagnostics &&
+          ((a.headers["X-WLOC-Frame-Kind"] = c),
+          (a.headers["X-WLOC-Wifi-Count"] = String(s.wifi)),
+          (a.headers["X-WLOC-Cell-Count"] = String(s.cell)),
+          (a.headers["X-WLOC-Location-Status"] = o.status))),
       (a.status = 200),
       (a.statusCode = 200),
       t.info(
-        `[wloc] 目标坐标: ${r.longitude},${r.latitude} 精度=${r.accuracy} patched=${o.locations}`,
+        `[wloc] 目标坐标: ${o.longitude},${o.latitude} 精度=${o.accuracy} 状态=${o.status} 进度=${o.progress} patched=${s.locations}`,
       ),
       a
     );
@@ -2547,8 +2553,19 @@ const Ze = {
   verticalAccuracy: null,
   motionActivityType: null,
   motionActivityConfidence: null,
+  diagnostics: false,
   logLevel: "info",
 };
+const MOVEMENT_PROFILES = {
+  walking: { speed: 1.4, accuracy: 12 },
+  cycling: { speed: 4.2, accuracy: 15 },
+  driving: { speed: 13.9, accuracy: 25 },
+};
+function parseBoolean(e, t = false) {
+  if ("boolean" == typeof e) return e;
+  if (null == e || "" === e) return t;
+  return ["true", "1", "yes", "on"].includes(String(e).toLowerCase());
+}
 function parseOptionalInteger(e) {
   if (null == e || "" === e) return null;
   const t = Number(e);
@@ -2562,6 +2579,106 @@ function normalizeLocationSettings(e) {
     verticalAccuracy: parseOptionalInteger(e.verticalAccuracy),
     motionActivityType: parseOptionalInteger(e.motionActivityType),
     motionActivityConfidence: parseOptionalInteger(e.motionActivityConfidence),
+    diagnostics: parseBoolean(e.diagnostics, false),
+  };
+}
+const EARTH_RADIUS_METERS = 6371008.8;
+function toTimestamp(e) {
+  if ("number" == typeof e) return Number.isFinite(e) ? e : null;
+  const t = Date.parse(e);
+  return Number.isFinite(t) ? t : null;
+}
+function routePoint(e) {
+  const t = Number(e?.latitude),
+    a = Number(e?.longitude),
+    r = null == e?.altitude || "" === e.altitude ? null : Number(e.altitude);
+  if (
+    !Number.isFinite(t) ||
+    !Number.isFinite(a) ||
+    t < -90 ||
+    t > 90 ||
+    a < -180 ||
+    a > 180 ||
+    (null != r && !Number.isFinite(r))
+  )
+    throw new Error("invalid route point");
+  return { latitude: t, longitude: a, altitude: r };
+}
+function distanceMeters(e, t) {
+  const a = (e.latitude * Math.PI) / 180,
+    r = (t.latitude * Math.PI) / 180,
+    n = ((t.latitude - e.latitude) * Math.PI) / 180,
+    i = ((t.longitude - e.longitude) * Math.PI) / 180,
+    o =
+      Math.sin(n / 2) ** 2 +
+      Math.cos(a) * Math.cos(r) * Math.sin(i / 2) ** 2;
+  return 2 * EARTH_RADIUS_METERS * Math.atan2(Math.sqrt(o), Math.sqrt(1 - o));
+}
+function resolveLocationState(e, t = Date.now()) {
+  const a = normalizeLocationSettings(e || {});
+  if ("route" !== a.mode) return { ...a, status: "stationary", progress: 0 };
+  if (!Array.isArray(a.route) || a.route.length < 2)
+    throw new Error("route requires at least two points");
+  const r = a.route.map(routePoint),
+    profile = MOVEMENT_PROFILES[a.profile] || null;
+  ((a.profile = profile ? a.profile : "custom"),
+    (a.speed = Number.isFinite(Number(a.speed)) ? Number(a.speed) : profile?.speed),
+    (a.accuracy = Number.isFinite(Number(a.accuracy))
+      ? Number(a.accuracy)
+      : (profile?.accuracy ?? 25)));
+  const n = Number(a.speed),
+    i = toTimestamp(a.startedAt),
+    o = Number(t);
+  if (!Number.isFinite(n) || n <= 0) throw new Error("route speed must be positive");
+  if (null == i || !Number.isFinite(o)) throw new Error("invalid route time");
+  const s = [],
+    l = [];
+  let c = 0;
+  for (let e = 0; e < r.length - 1; e++) {
+    const t = distanceMeters(r[e], r[e + 1]);
+    s.push(t);
+    c += t;
+    l.push(c);
+  }
+  if (!(c > 0)) throw new Error("route distance must be positive");
+  const d =
+      "paused" === a.status
+        ? toTimestamp(a.pausedAt)
+        : "stopped" === a.status
+          ? toTimestamp(a.stoppedAt)
+          : o,
+    u = Math.max(0, (null == d ? o : d) - i) / 1000,
+    g = c / n,
+    f =
+      o < i
+        ? "pending"
+        : "paused" === a.status
+          ? "paused"
+          : "stopped" === a.status
+            ? "stopped"
+            : "running";
+  let h = u * n,
+    p = f;
+  a.loop
+    ? (h %= c)
+    : h >= c &&
+      ((h = c), !["paused", "stopped"].includes(f) && (p = "completed"));
+  let b = 0;
+  for (; b < l.length - 1 && h > l[b]; b++);
+  const y = 0 === b ? 0 : l[b - 1],
+    m = s[b] > 0 ? (h - y) / s[b] : 0,
+    k = r[b],
+    v = r[b + 1],
+    w = (e, t) => (null != e && null != t ? e + (t - e) * m : (e ?? t));
+  return {
+    ...a,
+    latitude: k.latitude + (v.latitude - k.latitude) * m,
+    longitude: k.longitude + (v.longitude - k.longitude) * m,
+    altitude: w(k.altitude, v.altitude) ?? a.altitude,
+    status: p,
+    progress: h / c,
+    elapsedSeconds: u,
+    durationSeconds: g,
   };
 }
 function Pe() {
@@ -2588,6 +2705,7 @@ function Pe() {
     )),
     e.logLevel && (r.logLevel = e.logLevel),
     e.LogLevel && (r.logLevel = e.LogLevel),
+    (r.diagnostics = parseBoolean(e.diagnostics, false)),
     a)
   )
     (a.longitude && (r.longitude = parseFloat(a.longitude)),
@@ -2599,6 +2717,17 @@ function Pe() {
       (r.motionActivityConfidence = parseOptionalInteger(
         a.motionActivityConfidence,
       )),
+      (r.diagnostics = parseBoolean(a.diagnostics, r.diagnostics)),
+      "route" === a.mode &&
+        ((r.mode = "route"),
+        (r.route = a.route),
+        (r.speed = a.speed),
+        (r.profile = a.profile),
+        (r.loop = Boolean(a.loop)),
+        (r.status = a.status),
+        (r.startedAt = a.startedAt),
+        (r.pausedAt = a.pausedAt),
+        (r.stoppedAt = a.stoppedAt)),
       t.info(`[settings] 使用已保存坐标: ${r.longitude},${r.latitude}`));
   else if (113.94114 === r.longitude && 22.544577 === r.latitude)
     return (
@@ -2616,13 +2745,15 @@ function Pe() {
     r
   );
 }
-function rewriteWlocResponse(e, t) {
-  const a = Array.from(e),
-    r = { wifi: 0, cell: 0, locations: 0, skipped: 0 };
+function rewriteWlocResponse(e, t, a = Date.now()) {
+  const r = Array.from(e),
+    n = { wifi: 0, cell: 0, locations: 0, skipped: 0 };
   try {
-    return Ie(a, normalizeLocationSettings(t));
+    const e = resolveLocationState(t, a),
+      n = Ie(r, e);
+    return { ...n, locationState: e };
   } catch {
-    return { data: a, stats: r, frameKind: "passthrough" };
+    return { data: r, stats: n, frameKind: "passthrough" };
   }
 }
 function runWlocScript() {
@@ -2664,5 +2795,5 @@ function runWlocScript() {
     });
 }
 if ("undefined" != typeof module && module.exports)
-  module.exports = { rewriteWlocResponse };
+  module.exports = { resolveLocationState, rewriteWlocResponse };
 else runWlocScript();
