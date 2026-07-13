@@ -40,10 +40,9 @@ async function runQuantumultX({ argument = "", request, response, storedSettings
   return completed;
 }
 
-async function runSurgeRequest(request) {
+async function runNonQuantumultRequest(platform, request) {
   let completed;
   const context = {
-    $environment: { "surge-version": "test" },
     $argument: "",
     $request: request,
     $script: { startTime: Date.now() },
@@ -55,6 +54,9 @@ async function runSurgeRequest(request) {
     Uint8Array,
     ArrayBuffer,
   };
+  if (platform === "Surge")
+    context.$environment = { "surge-version": "test" };
+  else if (platform === "Loon") context.$loon = "test";
   await vm.runInNewContext(runtimeScript, context);
   return completed;
 }
@@ -438,7 +440,7 @@ test("Quantumult X request preparation asks the server for an identity body", as
 });
 
 test("Surge request preparation returns request headers without a response wrapper", async () => {
-  const result = await runSurgeRequest({
+  const result = await runNonQuantumultRequest("Surge", {
     url: "https://gs-loc.apple.com/clls/wloc",
     headers: { "accept-encoding": "gzip", "User-Agent": "locationd" },
   });
@@ -446,6 +448,16 @@ test("Surge request preparation returns request headers without a response wrapp
   assert.equal(result.response, undefined);
   assert.equal(result.headers["accept-encoding"], "identity");
   assert.equal(result.headers["User-Agent"], "locationd");
+});
+
+test("Loon request preparation returns request headers without a response wrapper", async () => {
+  const result = await runNonQuantumultRequest("Loon", {
+    url: "https://bluedot.is.autonavi.com.gds.alibabadns.com/clls/wloc",
+    headers: { "Accept-Encoding": "gzip" },
+  });
+
+  assert.equal(result.response, undefined);
+  assert.equal(result.headers["Accept-Encoding"], "identity");
 });
 
 test("Quantumult X rewrites a gzip WLOC response through its complete script entry", async () => {
