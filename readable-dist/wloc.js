@@ -2712,6 +2712,9 @@ function normalizeDiagnosticOutput(e) {
 function diagnosticOutputIncludes(e, t) {
   return "both" === e || e === t;
 }
+function isInspectSettings(e) {
+  return "inspect" === normalizeDiagnosticMode(e || {});
+}
 function normalizeLocationSettings(e) {
   const t = normalizeDiagnosticMode(e);
   return {
@@ -2916,7 +2919,7 @@ function rewriteWlocResponse(e, t, a = Date.now()) {
     n = { wifi: 0, cell: 0, locations: 0, skipped: 0 };
   try {
     const i = normalizeLocationSettings(t || {});
-    if ("inspect" === i.diagnosticMode) return inspectWlocResponse(r);
+    if (isInspectSettings(i)) return inspectWlocResponse(r);
     const e = resolveLocationState(i, a),
       n = Ie(r, e);
     return { ...n, locationState: e };
@@ -2938,7 +2941,7 @@ function runWlocScript() {
   if (!e) return void t.warn("[wloc] 非响应模式，跳过");
     const a = Pe();
     ((t.logLevel = a.logLevel),
-      (inspectPassThrough = "inspect" === a.mode),
+      (inspectPassThrough = isInspectSettings(a)),
       (ze = await De($request, e, a)));
   })()
   .catch((e) => t.error(e))

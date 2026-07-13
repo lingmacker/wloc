@@ -49,8 +49,9 @@
 
 ## 安全诊断
 
-- `diagnostics=true`：正常改写并输出封包类型和计数响应头。
-- `inspectMode=true` / `mode=inspect`：只解析不改写，返回压缩状态、长度、根字段直方图和位置计数。
+- `diagnosticMode=rewrite`：正常改写并输出封包类型、前后长度和计数摘要。
+- `diagnosticMode=inspect`：只解析不改写，返回压缩状态、长度、根字段直方图和位置计数。
+- `diagnosticOutput=both|headers|logs`：选择摘要输出到响应头、日志或两者。旧参数 `diagnostics`、`inspectMode` 仍兼容。
 - 不输出原始字节、Base64、BSSID 或基站标识。
 
 ## 注意
