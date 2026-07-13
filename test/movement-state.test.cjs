@@ -87,3 +87,10 @@ test("applies safe speed and accuracy defaults from a movement profile", () => {
   assert.equal(state.motionActivityType, null);
   assert.equal(state.motionActivityConfidence, null);
 });
+
+test("rejects an unknown persisted lifecycle state", () => {
+  assert.throws(
+    () => resolveLocationState(route({ status: "teleporting" }), 1_500),
+    /invalid route status/,
+  );
+});

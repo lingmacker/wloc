@@ -2619,6 +2619,8 @@ function resolveLocationState(e, t = Date.now()) {
   if ("route" !== a.mode) return { ...a, status: "stationary", progress: 0 };
   if (!Array.isArray(a.route) || a.route.length < 2)
     throw new Error("route requires at least two points");
+  if (!["running", "paused", "stopped", "completed"].includes(a.status))
+    throw new Error("invalid route status");
   const r = a.route.map(routePoint),
     profile = MOVEMENT_PROFILES[a.profile] || null;
   ((a.profile = profile ? a.profile : "custom"),
@@ -2694,8 +2696,14 @@ function Pe() {
     })(),
     r = { ...Ze };
   if (
-    (e.longitude && (r.longitude = parseFloat(e.longitude)),
-    e.latitude && (r.latitude = parseFloat(e.latitude)),
+    (null != e.longitude &&
+      "" !== e.longitude &&
+      Number.isFinite(Number(e.longitude)) &&
+      (r.longitude = parseFloat(e.longitude)),
+    null != e.latitude &&
+      "" !== e.latitude &&
+      Number.isFinite(Number(e.latitude)) &&
+      (r.latitude = parseFloat(e.latitude)),
     e.accuracy && (r.accuracy = parseInt(e.accuracy, 10)),
     (r.altitude = parseOptionalInteger(e.altitude)),
     (r.verticalAccuracy = parseOptionalInteger(e.verticalAccuracy)),
@@ -2708,8 +2716,10 @@ function Pe() {
     (r.diagnostics = parseBoolean(e.diagnostics, false)),
     a)
   )
-    (a.longitude && (r.longitude = parseFloat(a.longitude)),
-      a.latitude && (r.latitude = parseFloat(a.latitude)),
+    (Number.isFinite(Number(a.longitude)) &&
+      (r.longitude = parseFloat(a.longitude)),
+      Number.isFinite(Number(a.latitude)) &&
+        (r.latitude = parseFloat(a.latitude)),
       a.accuracy && (r.accuracy = parseInt(a.accuracy, 10)),
       (r.altitude = parseOptionalInteger(a.altitude)),
       (r.verticalAccuracy = parseOptionalInteger(a.verticalAccuracy)),

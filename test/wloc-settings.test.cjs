@@ -108,6 +108,13 @@ test("route controls preserve elapsed progress across pause and resume", () => {
   assert.equal(stopped.settings.status, "stopped");
   assert.equal(stopped.settings.stoppedAt, 20_000);
 
+  const resumeStopped = runSettings(
+    "https://gs-loc.apple.com/wloc-settings/save?action=resume",
+    values,
+    25_000,
+  );
+  assert.equal(resumeStopped.settings.status, "stopped");
+
   const queried = runSettings(
     "https://gs-loc.apple.com/wloc-settings/save?action=query",
     values,
@@ -115,6 +122,45 @@ test("route controls preserve elapsed progress across pause and resume", () => {
   );
   assert.equal(queried.settings.route.length, 2);
   assert.equal(queried.settings.status, "stopped");
+});
+
+test("rejects an invalid later route point before persisting", () => {
+  const values = new Map();
+  const route = encodeURIComponent(
+    JSON.stringify([
+      { latitude: 35.681236, longitude: 139.767125 },
+      { latitude: "invalid", longitude: 139.745433 },
+    ]),
+  );
+  const result = runSettings(
+    `https://gs-loc.apple.com/wloc-settings/save?action=start&mode=route&route=${route}&profile=walking`,
+    values,
+    1_000,
+  );
+  assert.equal(result.success, false);
+  assert.equal(values.has("wloc_settings"), false);
+});
+
+test("reports a non-looping route as completed after its duration", () => {
+  const values = new Map();
+  const route = encodeURIComponent(
+    JSON.stringify([
+      { latitude: 0, longitude: 0 },
+      { latitude: 0, longitude: 0.001 },
+    ]),
+  );
+  const started = runSettings(
+    `https://gs-loc.apple.com/wloc-settings/save?action=start&mode=route&route=${route}&speed=1&loop=false`,
+    values,
+    1_000,
+  );
+  assert.equal(started.success, true);
+  const queried = runSettings(
+    "https://gs-loc.apple.com/wloc-settings/save?action=query",
+    values,
+    200_000,
+  );
+  assert.equal(queried.settings.status, "completed");
 });
 
 test("accepts zero latitude and longitude", () => {

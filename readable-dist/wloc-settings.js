@@ -662,6 +662,45 @@ class c {
     }
   };
 }
+const ROUTE_PROFILES = {
+  walking: { speed: 1.4, accuracy: 12 },
+  cycling: { speed: 4.2, accuracy: 15 },
+  driving: { speed: 13.9, accuracy: 25 },
+};
+function normalizeRoutePoint(e) {
+  const t = Number(e?.latitude),
+    a = Number(e?.longitude),
+    s = null == e?.altitude || "" === e.altitude ? null : Number(e.altitude);
+  if (
+    !Number.isFinite(t) ||
+    !Number.isFinite(a) ||
+    t < -90 ||
+    t > 90 ||
+    a < -180 ||
+    a > 180 ||
+    (null != s && !Number.isFinite(s))
+  )
+    throw new Error("路线点无效");
+  return { latitude: t, longitude: a, altitude: s };
+}
+function routeDurationSeconds(e, t) {
+  const a = 6371008.8;
+  let s = 0;
+  for (let r = 0; r < e.length - 1; r++) {
+    const n = e[r],
+      i = e[r + 1],
+      o = (n.latitude * Math.PI) / 180,
+      c = (i.latitude * Math.PI) / 180,
+      l = ((i.latitude - n.latitude) * Math.PI) / 180,
+      u = ((i.longitude - n.longitude) * Math.PI) / 180,
+      d =
+        Math.sin(l / 2) ** 2 +
+        Math.cos(o) * Math.cos(c) * Math.sin(u / 2) ** 2;
+    s += 2 * a * Math.atan2(Math.sqrt(d), Math.sqrt(1 - d));
+  }
+  if (!(s > 0)) throw new Error("路线距离必须大于 0");
+  return s / t;
+}
 const n = "wloc_settings",
   i = $request.url || "";
 const l = (function (e) {
@@ -692,6 +731,16 @@ let d;
 if ((t.debug(`[wloc-settings] url=${i}, action=${u}`), "query" === u))
   try {
     const e = c.getItem(n);
+    if (
+      e &&
+      "route" === e.mode &&
+      "running" === e.status &&
+      !e.loop &&
+      (Date.now() - Number(e.startedAt)) / 1000 >=
+        routeDurationSeconds(e.route.map(normalizeRoutePoint), Number(e.speed))
+    ) {
+      ((e.status = "completed"), c.setItem(n, e));
+    }
     e &&
     "object" == typeof e &&
     Number.isFinite(Number(e.longitude)) &&
@@ -721,8 +770,8 @@ else if (["pause", "resume", "stop"].includes(u))
     const a = Date.now();
     if ("pause" === u && "running" === e.status)
       ((e.status = "paused"), (e.pausedAt = a));
-    else if ("resume" === u && ["paused", "stopped"].includes(e.status)) {
-      const t = "paused" === e.status ? e.pausedAt : e.stoppedAt;
+    else if ("resume" === u && "paused" === e.status) {
+      const t = e.pausedAt;
       Number.isFinite(Number(t)) &&
         (e.startedAt = Number(e.startedAt) + (a - Number(t)));
       ((e.status = "running"), (e.pausedAt = null), (e.stoppedAt = null));
@@ -763,23 +812,17 @@ else {
     verticalAccuracy = optionalInteger("verticalAccuracy"),
     motionActivityType = optionalInteger("motionActivityType"),
     motionActivityConfidence = optionalInteger("motionActivityConfidence");
-  if ("route" === l.get("mode")) {
+  if ("route" === l.get("mode") || "start" === u) {
     try {
-      const e = JSON.parse(l.get("route") || "[]"),
+      const e = JSON.parse(l.get("route") || "[]").map(normalizeRoutePoint),
         profile = ["walking", "cycling", "driving"].includes(l.get("profile"))
           ? l.get("profile")
           : "custom",
-        profileDefaults = {
-          walking: { speed: 1.4, accuracy: 12 },
-          cycling: { speed: 4.2, accuracy: 15 },
-          driving: { speed: 13.9, accuracy: 25 },
-        },
-        a = Number(l.get("speed") || profileDefaults[profile]?.speed),
+        a = Number(l.get("speed") || ROUTE_PROFILES[profile]?.speed),
         start = e[0];
       if (!Array.isArray(e) || e.length < 2) throw new Error("路线至少需要两个点");
       if (!Number.isFinite(a) || a <= 0) throw new Error("路线速度必须大于 0");
-      if (!start || !Number.isFinite(Number(start.longitude)) || !Number.isFinite(Number(start.latitude)))
-        throw new Error("路线起点无效");
+      routeDurationSeconds(e, a);
       const r = {
         mode: "route",
         route: e,
@@ -796,7 +839,7 @@ else {
         latitude: Number(start.latitude),
         accuracy: l.has("acc") || l.has("accuracy")
           ? s
-          : (profileDefaults[profile]?.accuracy ?? 25),
+          : (ROUTE_PROFILES[profile]?.accuracy ?? 25),
         altitude,
         verticalAccuracy,
         motionActivityType,

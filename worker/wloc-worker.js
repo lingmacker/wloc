@@ -250,7 +250,7 @@ async function startRoute() {
   const profile = document.getElementById('routeProfile').value;
   const diagnostics = document.getElementById('routeDiagnostics').checked;
   try {
-    const u = SAVE_API + '?mode=route&route=' + encodeURIComponent(JSON.stringify(routePoints)) + '&profile=' + profile + '&speed=' + speed + '&loop=' + loop + '&diagnostics=' + diagnostics;
+    const u = SAVE_API + '?action=start&mode=route&route=' + encodeURIComponent(JSON.stringify(routePoints)) + '&profile=' + profile + '&speed=' + speed + '&loop=' + loop + '&diagnostics=' + diagnostics;
     const d = await fetch(u, {method:'GET', mode:'cors', cache:'no-store'}).then(r => r.json());
     if (!d.success) throw new Error(d.error || '\u542F\u52A8\u5931\u8D25');
     updateRouteStatus(d.settings);
