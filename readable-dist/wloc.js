@@ -2549,6 +2549,21 @@ const Ze = {
   motionActivityConfidence: null,
   logLevel: "info",
 };
+function parseOptionalInteger(e) {
+  if (null == e || "" === e) return null;
+  const t = Number(e);
+  return Number.isFinite(t) ? Math.trunc(t) : null;
+}
+function normalizeLocationSettings(e) {
+  return {
+    ...Ze,
+    ...e,
+    altitude: parseOptionalInteger(e.altitude),
+    verticalAccuracy: parseOptionalInteger(e.verticalAccuracy),
+    motionActivityType: parseOptionalInteger(e.motionActivityType),
+    motionActivityConfidence: parseOptionalInteger(e.motionActivityConfidence),
+  };
+}
 function Pe() {
   const e = globalThis.$argument || {},
     a = (function () {
@@ -2565,14 +2580,12 @@ function Pe() {
     (e.longitude && (r.longitude = parseFloat(e.longitude)),
     e.latitude && (r.latitude = parseFloat(e.latitude)),
     e.accuracy && (r.accuracy = parseInt(e.accuracy, 10)),
-    null != e.altitude && "" !== e.altitude &&
-      (r.altitude = parseInt(e.altitude, 10)),
-    null != e.verticalAccuracy && "" !== e.verticalAccuracy &&
-      (r.verticalAccuracy = parseInt(e.verticalAccuracy, 10)),
-    null != e.motionActivityType && "" !== e.motionActivityType &&
-      (r.motionActivityType = parseInt(e.motionActivityType, 10)),
-    null != e.motionActivityConfidence && "" !== e.motionActivityConfidence &&
-      (r.motionActivityConfidence = parseInt(e.motionActivityConfidence, 10)),
+    (r.altitude = parseOptionalInteger(e.altitude)),
+    (r.verticalAccuracy = parseOptionalInteger(e.verticalAccuracy)),
+    (r.motionActivityType = parseOptionalInteger(e.motionActivityType)),
+    (r.motionActivityConfidence = parseOptionalInteger(
+      e.motionActivityConfidence,
+    )),
     e.logLevel && (r.logLevel = e.logLevel),
     e.LogLevel && (r.logLevel = e.LogLevel),
     a)
@@ -2580,13 +2593,12 @@ function Pe() {
     (a.longitude && (r.longitude = parseFloat(a.longitude)),
       a.latitude && (r.latitude = parseFloat(a.latitude)),
       a.accuracy && (r.accuracy = parseInt(a.accuracy, 10)),
-      null != a.altitude && (r.altitude = parseInt(a.altitude, 10)),
-      null != a.verticalAccuracy &&
-        (r.verticalAccuracy = parseInt(a.verticalAccuracy, 10)),
-      null != a.motionActivityType &&
-        (r.motionActivityType = parseInt(a.motionActivityType, 10)),
-      null != a.motionActivityConfidence &&
-        (r.motionActivityConfidence = parseInt(a.motionActivityConfidence, 10)),
+      (r.altitude = parseOptionalInteger(a.altitude)),
+      (r.verticalAccuracy = parseOptionalInteger(a.verticalAccuracy)),
+      (r.motionActivityType = parseOptionalInteger(a.motionActivityType)),
+      (r.motionActivityConfidence = parseOptionalInteger(
+        a.motionActivityConfidence,
+      )),
       t.info(`[settings] 使用已保存坐标: ${r.longitude},${r.latitude}`));
   else if (113.94114 === r.longitude && 22.544577 === r.latitude)
     return (
@@ -2608,7 +2620,7 @@ function rewriteWlocResponse(e, t) {
   const a = Array.from(e),
     r = { wifi: 0, cell: 0, locations: 0, skipped: 0 };
   try {
-    return Ie(a, { ...Ze, ...t });
+    return Ie(a, normalizeLocationSettings(t));
   } catch {
     return { data: a, stats: r, frameKind: "passthrough" };
   }

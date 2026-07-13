@@ -128,6 +128,8 @@ https://raw.githubusercontent.com/Yu9191/wloc/refs/heads/main/modules/wloc.modul
 
 优先级: 在线选点储存 > 模块参数 > 默认值
 
+Quantumult X 的 `.conf` 格式没有模块参数界面；可选元数据可通过选点设置接口写入。其他支持参数界面的模块留空时会保留 Apple 响应中的原值。
+
 </details>
 
 <details>

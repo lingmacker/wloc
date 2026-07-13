@@ -26,6 +26,11 @@ function location(latitude, longitude) {
     ...field(1, 0, Math.round(latitude * 1e8)),
     ...field(2, 0, Math.round(longitude * 1e8)),
     ...field(3, 0, 80),
+    ...field(4, 0, 3),
+    ...field(5, 0, 530),
+    ...field(6, 0, 1000),
+    ...field(11, 0, 63),
+    ...field(12, 0, 467),
     ...field(15, 0, 77),
   ];
 }
@@ -41,6 +46,9 @@ function samplePayload() {
     ...field(2, 2, wifi),
     ...field(22, 2, cell),
     ...field(24, 2, cell),
+    ...field(3, 0, 1),
+    ...field(4, 0, 2),
+    ...field(33, 0, 3),
     ...field(40, 0, 9),
   ];
 }
@@ -72,7 +80,7 @@ function pascal(value) {
   return [...uint16(bytes.length), ...bytes];
 }
 
-function arpcResponse(payload) {
+function arpcResponse(payload, trailing = []) {
   return Uint8Array.from([
     ...uint16(1),
     ...pascal("ja_JP"),
@@ -81,6 +89,7 @@ function arpcResponse(payload) {
     ...uint32(1),
     ...uint32(payload.length),
     ...payload,
+    ...trailing,
   ]);
 }
 
@@ -178,6 +187,7 @@ test("rewrites a complete WLOC response to the configured Tokyo location", () =>
     assert.equal(child(fields, 1).value, 3568123600);
     assert.equal(child(fields, 2).value, 13976712500);
     assert.equal(child(fields, 3).value, 18);
+    assert.equal(child(fields, 4).value, 3);
     assert.equal(child(fields, 5).value, 41);
     assert.equal(child(fields, 6).value, 12);
     assert.equal(child(fields, 11).value, 1);
@@ -186,6 +196,9 @@ test("rewrites a complete WLOC response to the configured Tokyo location", () =>
   }
 
   assert.equal(child(root, 40).value, 9);
+  assert.equal(child(root, 3).value, 1);
+  assert.equal(child(root, 4).value, 2);
+  assert.equal(child(root, 33).value, 3);
   assert.deepEqual(result.stats, {
     wifi: 1,
     cell: 2,
@@ -194,8 +207,27 @@ test("rewrites a complete WLOC response to the configured Tokyo location", () =>
   });
 });
 
+test("preserves optional Apple metadata when settings are unset or invalid", () => {
+  const input = syntheticResponse(samplePayload());
+  const result = rewriteWlocResponse(input, {
+    latitude: 35.681236,
+    longitude: 139.767125,
+    accuracy: 18,
+    altitude: "not-a-number",
+  });
+  const payloadLength = (result.data[8] << 8) | result.data[9];
+  const root = parseFields(result.data.slice(10, 10 + payloadLength));
+  const fields = parseFields(child(parseFields(child(root, 2).value), 2).value);
+
+  assert.equal(child(fields, 4).value, 3);
+  assert.equal(child(fields, 5).value, 530);
+  assert.equal(child(fields, 6).value, 1000);
+  assert.equal(child(fields, 11).value, 63);
+  assert.equal(child(fields, 12).value, 467);
+});
+
 test("preserves an ARPC envelope and updates its payload length", () => {
-  const input = arpcResponse(samplePayload());
+  const input = arpcResponse(samplePayload(), [0xde, 0xad]);
   const result = rewriteWlocResponse(input, {
     latitude: 35.681236,
     longitude: 139.767125,
@@ -211,7 +243,7 @@ test("preserves an ARPC envelope and updates its payload length", () => {
   assert.equal(arpc.osVersion, "27.0");
   assert.equal(arpc.functionId, 1);
   assert.equal(arpc.payloadLength, arpc.payload.length);
-  assert.equal(arpc.trailing.length, 0);
+  assert.deepEqual(Array.from(arpc.trailing), [0xde, 0xad]);
 
   const root = parseFields(arpc.payload);
   const wifiLocation = parseFields(child(parseFields(child(root, 2).value), 2).value);
