@@ -38,7 +38,7 @@ function runSettings(url, values, now = Date.now()) {
 test("optional settings round-trip zero and null values", () => {
   const values = new Map();
   const saved = runSettings(
-    "https://gs-loc.apple.com/wloc-settings/save?lon=139.767125&lat=35.681236&acc=18&altitude=0&verticalAccuracy=&motionActivityType=0&motionActivityConfidence=100",
+    "https://gs-loc.apple.com/wloc-settings/save?lon=139.767125&lat=35.681236&acc=18&altitude=0&verticalAccuracy=&motionActivityType=0&motionActivityConfidence=100&diagnostics=true&inspectMode=true",
     values,
   );
   assert.equal(saved.success, true);
@@ -50,6 +50,8 @@ test("optional settings round-trip zero and null values", () => {
   assert.equal(saved.motionActivityType, 0);
   assert.equal(saved.motionActivityConfidence, 100);
   assert.equal(saved.settings.mode, "static");
+  assert.equal(saved.settings.diagnostics, true);
+  assert.equal(saved.settings.inspectMode, true);
 
   const queried = runSettings(
     "https://gs-loc.apple.com/wloc-settings/save?action=query",
@@ -59,6 +61,7 @@ test("optional settings round-trip zero and null values", () => {
   assert.equal(queried.verticalAccuracy, null);
   assert.equal(queried.motionActivityType, 0);
   assert.equal(queried.motionActivityConfidence, 100);
+  assert.equal(queried.settings.inspectMode, true);
 });
 
 test("route controls preserve elapsed progress across pause and resume", () => {

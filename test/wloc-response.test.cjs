@@ -1,5 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
+const { gzipSync } = require("node:zlib");
 
 const { rewriteWlocResponse } = require("../dist/wloc.js");
 
@@ -310,4 +311,40 @@ test("passes an unrecognized response through unchanged", () => {
     locations: 0,
     skipped: 0,
   });
+});
+
+test("inspects a WLOC response without modifying or exposing identifiers", () => {
+  const input = syntheticResponse(samplePayload());
+  const result = rewriteWlocResponse(input, { mode: "inspect" }, 1_500);
+
+  assert.deepEqual(result.data, Array.from(input));
+  assert.equal(result.frameKind, "framed");
+  assert.equal(result.diagnostics.mode, "inspect");
+  assert.equal(result.diagnostics.compressed, false);
+  assert.equal(result.diagnostics.inputLength, input.length);
+  assert.equal(result.diagnostics.payloadLength, samplePayload().length);
+  assert.equal(result.diagnostics.fieldHistogram["2/2"], 1);
+  assert.equal(result.diagnostics.fieldHistogram["22/2"], 1);
+  assert.equal(result.diagnostics.fieldHistogram["24/2"], 1);
+  assert.equal(result.diagnostics.wifiCount, 1);
+  assert.equal(result.diagnostics.cell22Count, 1);
+  assert.equal(result.diagnostics.cell24Count, 1);
+  assert.equal(result.diagnostics.locationCount, 3);
+
+  const serialized = JSON.stringify(result.diagnostics).toLowerCase();
+  for (const forbidden of ["base64", "bssid", "rawbody", "bodybytes", "aa:bb"])
+    assert.equal(serialized.includes(forbidden), false);
+});
+
+test("inspects gzip data while returning the original compressed bytes", () => {
+  const plain = syntheticResponse(samplePayload());
+  const input = gzipSync(plain);
+  const result = rewriteWlocResponse(input, { mode: "inspect" });
+
+  assert.deepEqual(result.data, Array.from(input));
+  assert.equal(result.diagnostics.compressed, true);
+  assert.equal(result.diagnostics.inputLength, input.length);
+  assert.equal(result.diagnostics.decodedLength, plain.length);
+  assert.equal(result.frameKind, "framed");
+  assert.equal(result.diagnostics.locationCount, 3);
 });

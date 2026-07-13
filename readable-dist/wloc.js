@@ -2405,6 +2405,81 @@ function tryPatchArpcEnvelope(e, t, a) {
     r.suffix,
   ]);
 }
+function looksLikeWlocRoot(e) {
+  try {
+    return Re(e).some(
+      (e) => 2 === e.wireType && [2, 22, 24].includes(e.fieldNo),
+    );
+  } catch {
+    return false;
+  }
+}
+function extractWlocPayload(e) {
+  const t = tryParseArpcEnvelope(e);
+  if (t) return { frameKind: "arpc", payload: t.payload };
+  const a = Math.min(96, Math.max(0, e.length - 10));
+  for (let t = 0; t <= a; t++) {
+    if (t + 10 > e.length) break;
+    const a = ((255 & e[t + 8]) << 8) | (255 & e[t + 9]),
+      r = e.slice(t + 10, t + 10 + a);
+    if (a > 0 && t + 10 + a <= e.length && looksLikeWlocRoot(r))
+      return { frameKind: "framed", payload: r };
+  }
+  const r = Math.min(256, e.length);
+  for (let t = 0; t <= r; t++) {
+    const a = e.slice(t);
+    if (looksLikeWlocRoot(a)) return { frameKind: "bare", payload: a };
+  }
+  throw new Error("unrecognized WLOC response");
+}
+function inspectWlocResponse(e) {
+  const t = Array.from(e),
+    a = Me(t),
+    r = a ? Array.from(Ee(new Uint8Array(t))) : t,
+    n = extractWlocPayload(r),
+    i = Re(n.payload),
+    o = {};
+  for (const e of i) {
+    const t = `${e.fieldNo}/${e.wireType}`;
+    o[t] = (o[t] || 0) + 1;
+  }
+  let s = 0;
+  for (const e of i)
+    if (2 === e.wireType && 2 === e.fieldNo)
+      try {
+        s += Re(e.value).filter((e) => 2 === e.fieldNo && 2 === e.wireType)
+          .length;
+      } catch {}
+    else if (2 === e.wireType && [22, 24].includes(e.fieldNo))
+      try {
+        s += Re(e.value).filter((e) => 5 === e.fieldNo && 2 === e.wireType)
+          .length;
+      } catch {}
+  return {
+    data: t,
+    frameKind: n.frameKind,
+    stats: {
+      wifi: i.filter((e) => 2 === e.fieldNo && 2 === e.wireType).length,
+      cell: i.filter(
+        (e) => [22, 24].includes(e.fieldNo) && 2 === e.wireType,
+      ).length,
+      locations: s,
+      skipped: 0,
+    },
+    diagnostics: {
+      mode: "inspect",
+      compressed: a,
+      inputLength: t.length,
+      decodedLength: r.length,
+      payloadLength: n.payload.length,
+      fieldHistogram: o,
+      wifiCount: i.filter((e) => 2 === e.fieldNo && 2 === e.wireType).length,
+      cell22Count: i.filter((e) => 22 === e.fieldNo && 2 === e.wireType).length,
+      cell24Count: i.filter((e) => 24 === e.fieldNo && 2 === e.wireType).length,
+      locationCount: s,
+    },
+  };
+}
 function Ie(e, a) {
   const r = { wifi: 0, cell: 0, locations: 0, skipped: 0 };
   if (e.length < 10) throw new Error("body too short: " + e.length);
@@ -2504,6 +2579,34 @@ async function De(e, a, r) {
       return [];
     })(a.bodyBytes || a.rawBody || a.body);
     if (!e.length) return (t.warn("[wloc] 无二进制 body，跳过"), a);
+    if ("inspect" === r.mode) {
+      const n = inspectWlocResponse(e),
+        i = n.diagnostics,
+        o = null != a.bodyBytes
+          ? "bodyBytes"
+          : null != a.rawBody
+            ? "rawBody"
+            : "body";
+      return (
+        a.headers &&
+          ((a.headers["X-WLOC-Mode"] = "inspect"),
+          (a.headers["X-WLOC-Frame-Kind"] = n.frameKind),
+          (a.headers["X-WLOC-Compressed"] = String(i.compressed)),
+          (a.headers["X-WLOC-Body-Source"] = o),
+          (a.headers["X-WLOC-Input-Length"] = String(i.inputLength)),
+          (a.headers["X-WLOC-Payload-Length"] = String(i.payloadLength)),
+          (a.headers["X-WLOC-Wifi-Count"] = String(i.wifiCount)),
+          (a.headers["X-WLOC-Cell-Count"] = String(n.stats.cell)),
+          (a.headers["X-WLOC-Location-Count"] = String(i.locationCount)),
+          (a.headers["X-WLOC-Field-Histogram"] = Object.entries(
+            i.fieldHistogram,
+          )
+            .map(([e, t]) => `${e}:${t}`)
+            .join(","))),
+        t.info(`[wloc-inspect] ${JSON.stringify({ ...i, bodySource: o })}`),
+        a
+      );
+    }
     const o = resolveLocationState(r, Date.now());
     if (
       (t.debug(`[wloc] input length=${e.length} gzip=${Me(e)}`),
@@ -2554,6 +2657,7 @@ const Ze = {
   motionActivityType: null,
   motionActivityConfidence: null,
   diagnostics: false,
+  inspectMode: false,
   logLevel: "info",
 };
 const MOVEMENT_PROFILES = {
@@ -2580,6 +2684,7 @@ function normalizeLocationSettings(e) {
     motionActivityType: parseOptionalInteger(e.motionActivityType),
     motionActivityConfidence: parseOptionalInteger(e.motionActivityConfidence),
     diagnostics: parseBoolean(e.diagnostics, false),
+    inspectMode: parseBoolean(e.inspectMode, false),
   };
 }
 const EARTH_RADIUS_METERS = 6371008.8;
@@ -2714,6 +2819,8 @@ function Pe() {
     e.logLevel && (r.logLevel = e.logLevel),
     e.LogLevel && (r.logLevel = e.LogLevel),
     (r.diagnostics = parseBoolean(e.diagnostics, false)),
+    (r.inspectMode = parseBoolean(e.inspectMode, false)),
+    r.inspectMode && (r.mode = "inspect"),
     a)
   )
     (Number.isFinite(Number(a.longitude)) &&
@@ -2728,6 +2835,7 @@ function Pe() {
         a.motionActivityConfidence,
       )),
       (r.diagnostics = parseBoolean(a.diagnostics, r.diagnostics)),
+      (r.inspectMode = parseBoolean(a.inspectMode, r.inspectMode)),
       "route" === a.mode &&
         ((r.mode = "route"),
         (r.route = a.route),
@@ -2738,6 +2846,7 @@ function Pe() {
         (r.startedAt = a.startedAt),
         (r.pausedAt = a.pausedAt),
         (r.stoppedAt = a.stoppedAt)),
+      r.inspectMode && (r.mode = "inspect"),
       t.info(`[settings] 使用已保存坐标: ${r.longitude},${r.latitude}`));
   else if (113.94114 === r.longitude && 22.544577 === r.latitude)
     return (
@@ -2759,6 +2868,7 @@ function rewriteWlocResponse(e, t, a = Date.now()) {
   const r = Array.from(e),
     n = { wifi: 0, cell: 0, locations: 0, skipped: 0 };
   try {
+    if ("inspect" === t?.mode) return inspectWlocResponse(r);
     const e = resolveLocationState(t, a),
       n = Ie(r, e);
     return { ...n, locationState: e };
@@ -2767,7 +2877,8 @@ function rewriteWlocResponse(e, t, a = Date.now()) {
   }
 }
 function runWlocScript() {
-  let ze;
+  let ze,
+    inspectPassThrough = !1;
   return (async () => {
   const e = (function () {
     try {
@@ -2777,22 +2888,26 @@ function runWlocScript() {
     }
   })();
   if (!e) return void t.warn("[wloc] 非响应模式，跳过");
-  const a = Pe();
-  ((t.logLevel = a.logLevel), (ze = await De($request, e, a)));
+    const a = Pe();
+    ((t.logLevel = a.logLevel),
+      (inspectPassThrough = "inspect" === a.mode),
+      (ze = await De($request, e, a)));
   })()
   .catch((e) => t.error(e))
   .finally(() => {
     switch (typeof ze) {
       case "object":
-        (ze.headers?.["Content-Encoding"] &&
+        (!inspectPassThrough &&
+          ze.headers?.["Content-Encoding"] &&
           (ze.headers["Content-Encoding"] = "identity"),
-          ze.headers?.["content-encoding"] &&
+          !inspectPassThrough &&
+            ze.headers?.["content-encoding"] &&
             (ze.headers["content-encoding"] = "identity"),
           "Quantumult X" === e
             ? (ze.status || (ze.status = 200),
-              delete ze.headers?.["Content-Length"],
-              delete ze.headers?.["content-length"],
-              delete ze.headers?.["Transfer-Encoding"],
+              !inspectPassThrough && delete ze.headers?.["Content-Length"],
+              !inspectPassThrough && delete ze.headers?.["content-length"],
+              !inspectPassThrough && delete ze.headers?.["Transfer-Encoding"],
               i(ze))
             : i({ response: ze }));
         break;

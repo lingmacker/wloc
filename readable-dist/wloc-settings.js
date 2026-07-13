@@ -847,6 +847,9 @@ else {
         diagnostics: ["true", "1", "yes", "on"].includes(
           String(l.get("diagnostics") || "false").toLowerCase(),
         ),
+        inspectMode: ["true", "1", "yes", "on"].includes(
+          String(l.get("inspectMode") || "false").toLowerCase(),
+        ),
         updatedAt: new Date(Date.now() + 288e5)
           .toISOString()
           .replace("Z", "+08:00"),
@@ -878,6 +881,9 @@ else {
       motionActivityConfidence,
       diagnostics: ["true", "1", "yes", "on"].includes(
         String(l.get("diagnostics") || "false").toLowerCase(),
+      ),
+      inspectMode: ["true", "1", "yes", "on"].includes(
+        String(l.get("inspectMode") || "false").toLowerCase(),
       ),
       updatedAt: new Date(Date.now() + 288e5)
         .toISOString()

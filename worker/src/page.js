@@ -126,6 +126,7 @@ body { font-family:-apple-system,system-ui,"SF Pro","Helvetica Neue",sans-serif;
       <input id="routeSpeed" type="number" min="0.1" step="0.1" value="1.4" placeholder="速度 m/s" />
       <label style="display:flex;align-items:center;gap:5px;font-size:13px"><input id="routeLoop" type="checkbox" />循环</label>
       <label style="display:flex;align-items:center;gap:5px;font-size:13px"><input id="routeDiagnostics" type="checkbox" />诊断</label>
+      <label style="display:flex;align-items:center;gap:5px;font-size:13px"><input id="routeInspect" type="checkbox" />只检查</label>
     </div>
     <div class="row">
       <button class="btn btn-secondary" onclick="addRoutePoint()">添加当前点</button>
@@ -250,8 +251,9 @@ async function startRoute() {
   const loop = document.getElementById('routeLoop').checked;
   const profile = document.getElementById('routeProfile').value;
   const diagnostics = document.getElementById('routeDiagnostics').checked;
+  const inspectMode = document.getElementById('routeInspect').checked;
   try {
-    const u = SAVE_API + '?action=start&mode=route&route=' + encodeURIComponent(JSON.stringify(routePoints)) + '&profile=' + profile + '&speed=' + speed + '&loop=' + loop + '&diagnostics=' + diagnostics;
+    const u = SAVE_API + '?action=start&mode=route&route=' + encodeURIComponent(JSON.stringify(routePoints)) + '&profile=' + profile + '&speed=' + speed + '&loop=' + loop + '&diagnostics=' + diagnostics + '&inspectMode=' + inspectMode;
     const d = await fetch(u, {method:'GET', mode:'cors', cache:'no-store'}).then(r => r.json());
     if (!d.success) throw new Error(d.error || '启动失败');
     updateRouteStatus(d.settings);
@@ -276,6 +278,7 @@ function updateRouteStatus(settings) {
   document.getElementById('routeSpeed').value = settings.speed;
   document.getElementById('routeLoop').checked = Boolean(settings.loop);
   document.getElementById('routeDiagnostics').checked = Boolean(settings.diagnostics);
+  document.getElementById('routeInspect').checked = Boolean(settings.inspectMode);
   routePoints = settings.route.map(p => ({latitude:Number(p.latitude), longitude:Number(p.longitude), altitude:p.altitude}));
   renderRoute();
 }
@@ -418,7 +421,9 @@ async function save() {
   btn.textContent = '储存中...'; btn.disabled = true;
   showError(false);
   try {
-    const r = await fetch(SAVE_API + '?lon=' + lon + '&lat=' + lat + '&acc=25', {
+    const diagnostics = document.getElementById('routeDiagnostics').checked;
+    const inspectMode = document.getElementById('routeInspect').checked;
+    const r = await fetch(SAVE_API + '?lon=' + lon + '&lat=' + lat + '&acc=25&diagnostics=' + diagnostics + '&inspectMode=' + inspectMode, {
       method: 'GET', mode: 'cors', cache: 'no-store'
     });
     const d = await r.json();

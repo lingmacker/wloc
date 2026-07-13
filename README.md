@@ -111,7 +111,12 @@ https://raw.githubusercontent.com/Yu9191/wloc/refs/heads/main/modules/wloc.modul
 
 运动档案只提供保守的默认速度与水平精度：步行 1.4m/s、骑行 4.2m/s、驾车 13.9m/s。由于 protobuf 字段 11/12 的枚举语义尚未得到可靠 schema 或真机样本确认，档案不会自动填写运动类型和置信度。
 
-诊断模式只在改写后的 HTTP 响应头中加入封包类型、Wi-Fi/基站数量和路线状态，不输出 BSSID、基站标识或原始响应。
+诊断提供两种模式：
+
+- **诊断**：正常改写，同时在 HTTP 响应头中加入封包类型、Wi-Fi/基站数量和路线状态。
+- **只检查**：解析但不修改响应，输出压缩状态、响应体来源、输入/payload 长度、根字段直方图和位置计数。gzip 仅在内存中解压用于分析，返回的压缩字节及压缩头保持不变。
+
+两种模式都不会输出 BSSID、基站标识或原始响应，也不提供 Base64 dump。只检查模式启用时不会产生虚拟定位效果。
 
 </details>
 
@@ -143,6 +148,7 @@ https://raw.githubusercontent.com/Yu9191/wloc/refs/heads/main/modules/wloc.modul
 | motionActivityType | 运动类型元数据(可选) | null |
 | motionActivityConfidence | 运动置信度元数据(可选) | null |
 | diagnostics | 输出不含设备标识的诊断响应头 | false |
+| inspectMode | 只解析诊断，不修改响应 | false |
 | logLevel | 日志级别 | info |
 
 优先级: 在线选点储存 > 模块参数 > 默认值
