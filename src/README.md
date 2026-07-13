@@ -64,6 +64,6 @@
 发布文件使用 Terser 从可读版本生成：
 
 ```sh
-npx --yes terser readable-dist/wloc.js --compress --mangle --comments '/^!|Build/' --ecma 2022 --output dist/wloc.js
-npx --yes terser readable-dist/wloc-settings.js --compress --mangle --comments '/^!|Build/' --ecma 2022 --output dist/wloc-settings.js
+npx --yes terser src/wloc.js --compress --mangle --comments '/^!|Build/' --ecma 2022 --output dist/wloc.js
+npx --yes terser src/wloc-settings.js --compress --mangle --comments '/^!|Build/' --ecma 2022 --output dist/wloc-settings.js
 ```
