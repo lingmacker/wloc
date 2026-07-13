@@ -2470,6 +2470,8 @@ function inspectWlocResponse(e) {
       mode: "inspect",
       compressed: a,
       inputLength: t.length,
+      responseLengthBefore: t.length,
+      responseLengthAfter: t.length,
       decodedLength: r.length,
       payloadLength: n.payload.length,
       fieldHistogram: o,
@@ -2579,7 +2581,7 @@ async function De(e, a, r) {
       return [];
     })(a.bodyBytes || a.rawBody || a.body);
     if (!e.length) return (t.warn("[wloc] 无二进制 body，跳过"), a);
-    if ("inspect" === r.mode) {
+    if ("inspect" === r.diagnosticMode) {
       const n = inspectWlocResponse(e),
         i = n.diagnostics,
         o = null != a.bodyBytes
@@ -2589,11 +2591,18 @@ async function De(e, a, r) {
             : "body";
       return (
         a.headers &&
+          diagnosticOutputIncludes(r.diagnosticOutput, "headers") &&
           ((a.headers["X-WLOC-Mode"] = "inspect"),
           (a.headers["X-WLOC-Frame-Kind"] = n.frameKind),
           (a.headers["X-WLOC-Compressed"] = String(i.compressed)),
           (a.headers["X-WLOC-Body-Source"] = o),
           (a.headers["X-WLOC-Input-Length"] = String(i.inputLength)),
+          (a.headers["X-WLOC-Response-Length-Before"] = String(
+            i.responseLengthBefore,
+          )),
+          (a.headers["X-WLOC-Response-Length-After"] = String(
+            i.responseLengthAfter,
+          )),
           (a.headers["X-WLOC-Payload-Length"] = String(i.payloadLength)),
           (a.headers["X-WLOC-Wifi-Count"] = String(i.wifiCount)),
           (a.headers["X-WLOC-Cell-Count"] = String(n.stats.cell)),
@@ -2603,7 +2612,8 @@ async function De(e, a, r) {
           )
             .map(([e, t]) => `${e}:${t}`)
             .join(","))),
-        t.info(`[wloc-inspect] ${JSON.stringify({ ...i, bodySource: o })}`),
+        diagnosticOutputIncludes(r.diagnosticOutput, "logs") &&
+          t.info(`[wloc-inspect] ${JSON.stringify({ ...i, bodySource: o })}`),
         a
       );
     }
@@ -2630,16 +2640,24 @@ async function De(e, a, r) {
         delete a.headers["Transfer-Encoding"],
         delete a.headers["transfer-encoding"],
         (a.headers["Content-Length"] = String(l.length)),
-        o.diagnostics &&
+        "rewrite" === o.diagnosticMode &&
+          diagnosticOutputIncludes(o.diagnosticOutput, "headers") &&
           ((a.headers["X-WLOC-Frame-Kind"] = c),
           (a.headers["X-WLOC-Wifi-Count"] = String(s.wifi)),
           (a.headers["X-WLOC-Cell-Count"] = String(s.cell)),
+          (a.headers["X-WLOC-Response-Length-Before"] = String(e.length)),
+          (a.headers["X-WLOC-Response-Length-After"] = String(l.length)),
           (a.headers["X-WLOC-Location-Status"] = o.status))),
       (a.status = 200),
       (a.statusCode = 200),
       t.info(
         `[wloc] 目标坐标: ${o.longitude},${o.latitude} 精度=${o.accuracy} 状态=${o.status} 进度=${o.progress} patched=${s.locations}`,
       ),
+      "rewrite" === o.diagnosticMode &&
+        diagnosticOutputIncludes(o.diagnosticOutput, "logs") &&
+        t.info(
+          `[wloc-diagnostics] ${JSON.stringify({ frameKind: c, responseLengthBefore: e.length, responseLengthAfter: l.length, wifiCount: s.wifi, cellCount: s.cell, locationCount: s.locations, locationStatus: o.status })}`,
+        ),
       a
     );
   } catch (e) {
@@ -2658,6 +2676,8 @@ const Ze = {
   motionActivityConfidence: null,
   diagnostics: false,
   inspectMode: false,
+  diagnosticMode: "off",
+  diagnosticOutput: "both",
   logLevel: "info",
 };
 const MOVEMENT_PROFILES = {
@@ -2675,7 +2695,25 @@ function parseOptionalInteger(e) {
   const t = Number(e);
   return Number.isFinite(t) ? Math.trunc(t) : null;
 }
+function normalizeDiagnosticMode(e) {
+  const t = String(e?.diagnosticMode || "").toLowerCase();
+  return ["off", "rewrite", "inspect"].includes(t)
+    ? t
+    : "inspect" === e?.mode || parseBoolean(e?.inspectMode, false)
+      ? "inspect"
+      : parseBoolean(e?.diagnostics, false)
+        ? "rewrite"
+        : "off";
+}
+function normalizeDiagnosticOutput(e) {
+  const t = String(e || "both").toLowerCase();
+  return ["both", "headers", "logs"].includes(t) ? t : "both";
+}
+function diagnosticOutputIncludes(e, t) {
+  return "both" === e || e === t;
+}
 function normalizeLocationSettings(e) {
+  const t = normalizeDiagnosticMode(e);
   return {
     ...Ze,
     ...e,
@@ -2685,6 +2723,8 @@ function normalizeLocationSettings(e) {
     motionActivityConfidence: parseOptionalInteger(e.motionActivityConfidence),
     diagnostics: parseBoolean(e.diagnostics, false),
     inspectMode: parseBoolean(e.inspectMode, false),
+    diagnosticMode: t,
+    diagnosticOutput: normalizeDiagnosticOutput(e.diagnosticOutput),
   };
 }
 const EARTH_RADIUS_METERS = 6371008.8;
@@ -2820,7 +2860,8 @@ function Pe() {
     e.LogLevel && (r.logLevel = e.LogLevel),
     (r.diagnostics = parseBoolean(e.diagnostics, false)),
     (r.inspectMode = parseBoolean(e.inspectMode, false)),
-    r.inspectMode && (r.mode = "inspect"),
+    (r.diagnosticMode = normalizeDiagnosticMode(e)),
+    (r.diagnosticOutput = normalizeDiagnosticOutput(e.diagnosticOutput)),
     a)
   )
     (Number.isFinite(Number(a.longitude)) &&
@@ -2836,6 +2877,13 @@ function Pe() {
       )),
       (r.diagnostics = parseBoolean(a.diagnostics, r.diagnostics)),
       (r.inspectMode = parseBoolean(a.inspectMode, r.inspectMode)),
+      (r.diagnosticMode =
+        null != a.diagnosticMode || null != a.inspectMode || null != a.diagnostics
+          ? normalizeDiagnosticMode(a)
+          : r.diagnosticMode),
+      (r.diagnosticOutput = normalizeDiagnosticOutput(
+        a.diagnosticOutput || r.diagnosticOutput,
+      )),
       "route" === a.mode &&
         ((r.mode = "route"),
         (r.route = a.route),
@@ -2846,7 +2894,6 @@ function Pe() {
         (r.startedAt = a.startedAt),
         (r.pausedAt = a.pausedAt),
         (r.stoppedAt = a.stoppedAt)),
-      r.inspectMode && (r.mode = "inspect"),
       t.info(`[settings] 使用已保存坐标: ${r.longitude},${r.latitude}`));
   else if (113.94114 === r.longitude && 22.544577 === r.latitude)
     return (
@@ -2868,8 +2915,9 @@ function rewriteWlocResponse(e, t, a = Date.now()) {
   const r = Array.from(e),
     n = { wifi: 0, cell: 0, locations: 0, skipped: 0 };
   try {
-    if ("inspect" === t?.mode) return inspectWlocResponse(r);
-    const e = resolveLocationState(t, a),
+    const i = normalizeLocationSettings(t || {});
+    if ("inspect" === i.diagnosticMode) return inspectWlocResponse(r);
+    const e = resolveLocationState(i, a),
       n = Ie(r, e);
     return { ...n, locationState: e };
   } catch {

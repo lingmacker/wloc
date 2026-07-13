@@ -811,7 +811,25 @@ else {
     altitude = optionalInteger("altitude"),
     verticalAccuracy = optionalInteger("verticalAccuracy"),
     motionActivityType = optionalInteger("motionActivityType"),
-    motionActivityConfidence = optionalInteger("motionActivityConfidence");
+    motionActivityConfidence = optionalInteger("motionActivityConfidence"),
+    legacyInspect = ["true", "1", "yes", "on"].includes(
+      String(l.get("inspectMode") || "false").toLowerCase(),
+    ),
+    legacyDiagnostics = ["true", "1", "yes", "on"].includes(
+      String(l.get("diagnostics") || "false").toLowerCase(),
+    ),
+    requestedDiagnosticMode = String(l.get("diagnosticMode") || "").toLowerCase(),
+    diagnosticMode = ["off", "rewrite", "inspect"].includes(requestedDiagnosticMode)
+      ? requestedDiagnosticMode
+      : legacyInspect
+        ? "inspect"
+        : legacyDiagnostics
+          ? "rewrite"
+          : "off",
+    requestedDiagnosticOutput = String(l.get("diagnosticOutput") || "both").toLowerCase(),
+    diagnosticOutput = ["both", "headers", "logs"].includes(requestedDiagnosticOutput)
+      ? requestedDiagnosticOutput
+      : "both";
   if ("route" === l.get("mode") || "start" === u) {
     try {
       const e = JSON.parse(l.get("route") || "[]").map(normalizeRoutePoint),
@@ -844,12 +862,8 @@ else {
         verticalAccuracy,
         motionActivityType,
         motionActivityConfidence,
-        diagnostics: ["true", "1", "yes", "on"].includes(
-          String(l.get("diagnostics") || "false").toLowerCase(),
-        ),
-        inspectMode: ["true", "1", "yes", "on"].includes(
-          String(l.get("inspectMode") || "false").toLowerCase(),
-        ),
+        diagnosticMode,
+        diagnosticOutput,
         updatedAt: new Date(Date.now() + 288e5)
           .toISOString()
           .replace("Z", "+08:00"),
@@ -879,12 +893,8 @@ else {
       verticalAccuracy,
       motionActivityType,
       motionActivityConfidence,
-      diagnostics: ["true", "1", "yes", "on"].includes(
-        String(l.get("diagnostics") || "false").toLowerCase(),
-      ),
-      inspectMode: ["true", "1", "yes", "on"].includes(
-        String(l.get("inspectMode") || "false").toLowerCase(),
-      ),
+      diagnosticMode,
+      diagnosticOutput,
       updatedAt: new Date(Date.now() + 288e5)
         .toISOString()
         .replace("Z", "+08:00"),

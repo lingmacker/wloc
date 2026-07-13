@@ -315,13 +315,19 @@ test("passes an unrecognized response through unchanged", () => {
 
 test("inspects a WLOC response without modifying or exposing identifiers", () => {
   const input = syntheticResponse(samplePayload());
-  const result = rewriteWlocResponse(input, { mode: "inspect" }, 1_500);
+  const result = rewriteWlocResponse(
+    input,
+    { diagnosticMode: "inspect", diagnosticOutput: "both" },
+    1_500,
+  );
 
   assert.deepEqual(result.data, Array.from(input));
   assert.equal(result.frameKind, "framed");
   assert.equal(result.diagnostics.mode, "inspect");
   assert.equal(result.diagnostics.compressed, false);
   assert.equal(result.diagnostics.inputLength, input.length);
+  assert.equal(result.diagnostics.responseLengthBefore, input.length);
+  assert.equal(result.diagnostics.responseLengthAfter, input.length);
   assert.equal(result.diagnostics.payloadLength, samplePayload().length);
   assert.equal(result.diagnostics.fieldHistogram["2/2"], 1);
   assert.equal(result.diagnostics.fieldHistogram["22/2"], 1);
@@ -339,7 +345,7 @@ test("inspects a WLOC response without modifying or exposing identifiers", () =>
 test("inspects gzip data while returning the original compressed bytes", () => {
   const plain = syntheticResponse(samplePayload());
   const input = gzipSync(plain);
-  const result = rewriteWlocResponse(input, { mode: "inspect" });
+  const result = rewriteWlocResponse(input, { inspectMode: true });
 
   assert.deepEqual(result.data, Array.from(input));
   assert.equal(result.diagnostics.compressed, true);
