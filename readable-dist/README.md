@@ -2,7 +2,7 @@
 
 这里保存 `dist/` 中两个发布脚本的格式化副本，用于审计和理解行为。
 
-- `wloc.js`：读取目标设置、解压 WLOC 响应、扫描 protobuf、改写 Wi-Fi/基站位置并返回响应。
+- `wloc.js`：预处理 WLOC 请求、读取目标设置、解压 WLOC 响应、扫描 protobuf、改写 Wi-Fi/基站位置并返回响应。
 - `wloc-settings.js`：处理 `save`、`query`、`clear` 三种设置请求，并读写 `wloc_settings`。
 - `dist/` 仍是实际发布文件，不应直接手工维护。
 
@@ -32,10 +32,13 @@
 - `tryParseArpcEnvelope` / `tryPatchArpcEnvelope`：优先识别并重建结构化 ARPC 封包。
 - `Ie`：依次尝试 ARPC、多个帧偏移，并在必要时回退为原始 protobuf 扫描。
 - `Me`：检测 gzip。
+- `prepareWlocRequest`：保留原请求头并将 `Accept-Encoding` 设为 `identity`。
 - `De`：执行完整响应改写流程。
 - `Pe`：合并模块参数和持久化设置，决定改写或透传。
 - `resolveLocationState`：根据路线、速度和请求时间计算一次一致的位置状态。
 - `rewriteWlocResponse`：完整响应的公共改写边界，静态定位和路线模拟共用。
+
+模块覆盖 Apple 的 `gs-loc(-cn).apple.com` 与高德承载的 `bluedot.is.autonavi.com`（含 Alibaba DNS 别名）。Quantumult X 分支使用 `$prefs` 和 `bodyBytes` 完成请求预处理与二进制响应输出。
 
 ## 路线状态
 

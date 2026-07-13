@@ -2715,6 +2715,11 @@ function diagnosticOutputIncludes(e, t) {
 function isInspectSettings(e) {
   return "inspect" === normalizeDiagnosticMode(e || {});
 }
+function prepareWlocRequest(e = {}) {
+  const t = { ...(e.headers || {}) },
+    a = Object.keys(t).find((e) => "accept-encoding" === e.toLowerCase());
+  return { ...e, headers: { ...t, [a || "Accept-Encoding"]: "identity" } };
+}
 function normalizeLocationSettings(e) {
   const t = normalizeDiagnosticMode(e);
   return {
@@ -2920,16 +2925,19 @@ function rewriteWlocResponse(e, t, a = Date.now()) {
   try {
     const i = normalizeLocationSettings(t || {});
     if (isInspectSettings(i)) return inspectWlocResponse(r);
+    const o = Me(r),
+      s = o ? Array.from(Ee(new Uint8Array(r))) : r;
     const e = resolveLocationState(i, a),
-      n = Ie(r, e);
-    return { ...n, locationState: e };
+      n = Ie(s, e);
+    return { ...n, compressed: o, locationState: e };
   } catch {
     return { data: r, stats: n, frameKind: "passthrough" };
   }
 }
 function runWlocScript() {
   let ze,
-    inspectPassThrough = !1;
+    inspectPassThrough = !1,
+    requestPreparation = !1;
   return (async () => {
   const e = (function () {
     try {
@@ -2938,7 +2946,15 @@ function runWlocScript() {
       return;
     }
   })();
-  if (!e) return void t.warn("[wloc] 非响应模式，跳过");
+  if (!e) {
+    const e =
+      "undefined" != typeof $request ? prepareWlocRequest($request) : null;
+    return e
+      ? void ((requestPreparation = !0),
+        (ze = { headers: e.headers }),
+        t.debug("[wloc] 请求预处理: Accept-Encoding=identity"))
+      : void t.warn("[wloc] 非请求/响应模式，跳过");
+  }
     const a = Pe();
     ((t.logLevel = a.logLevel),
       (inspectPassThrough = isInspectSettings(a)),
@@ -2948,7 +2964,9 @@ function runWlocScript() {
   .finally(() => {
     switch (typeof ze) {
       case "object":
-        (!inspectPassThrough &&
+        (requestPreparation
+          ? i(ze)
+          : (!inspectPassThrough &&
           ze.headers?.["Content-Encoding"] &&
           (ze.headers["Content-Encoding"] = "identity"),
           !inspectPassThrough &&
@@ -2960,7 +2978,7 @@ function runWlocScript() {
               !inspectPassThrough && delete ze.headers?.["content-length"],
               !inspectPassThrough && delete ze.headers?.["Transfer-Encoding"],
               i(ze))
-            : i({ response: ze }));
+            : i({ response: ze })));
         break;
       case "undefined":
         i({});
@@ -2971,5 +2989,9 @@ function runWlocScript() {
     });
 }
 if ("undefined" != typeof module && module.exports)
-  module.exports = { resolveLocationState, rewriteWlocResponse };
+  module.exports = {
+    prepareWlocRequest,
+    resolveLocationState,
+    rewriteWlocResponse,
+  };
 else runWlocScript();

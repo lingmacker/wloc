@@ -1,8 +1,63 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const { gzipSync } = require("node:zlib");
+const fs = require("node:fs");
+const vm = require("node:vm");
 
 const { rewriteWlocResponse } = require("../dist/wloc.js");
+const runtimeScript = fs.readFileSync(require.resolve("../dist/wloc.js"), "utf8");
+
+async function runQuantumultX({ argument = "", request, response, storedSettings }) {
+  let completed;
+  const context = {
+    $task: {},
+    $argument: argument,
+    $request: request,
+    $response: response,
+    $prefs: {
+      valueForKey(key) {
+        return key === "wloc_settings" && storedSettings
+          ? JSON.stringify(storedSettings)
+          : null;
+      },
+      setValueForKey() {
+        return true;
+      },
+      removeValueForKey() {
+        return true;
+      },
+    },
+    $done(value) {
+      completed = value;
+    },
+    console: { log() {} },
+    TextEncoder,
+    TextDecoder,
+    Uint8Array,
+    ArrayBuffer,
+  };
+  await vm.runInNewContext(runtimeScript, context);
+  return completed;
+}
+
+async function runSurgeRequest(request) {
+  let completed;
+  const context = {
+    $environment: { "surge-version": "test" },
+    $argument: "",
+    $request: request,
+    $script: { startTime: Date.now() },
+    $persistentStore: { read() { return null; }, write() { return true; } },
+    $done(value) { completed = value; },
+    console: { log() {} },
+    TextEncoder,
+    TextDecoder,
+    Uint8Array,
+    ArrayBuffer,
+  };
+  await vm.runInNewContext(runtimeScript, context);
+  return completed;
+}
 
 function varint(value) {
   let remaining = BigInt(value);
@@ -353,4 +408,103 @@ test("inspects gzip data while returning the original compressed bytes", () => {
   assert.equal(result.diagnostics.decodedLength, plain.length);
   assert.equal(result.frameKind, "framed");
   assert.equal(result.diagnostics.locationCount, 3);
+});
+
+test("rewrites a gzip WLOC response to decoded patched bytes", () => {
+  const plain = syntheticResponse(samplePayload());
+  const input = gzipSync(plain);
+  const settings = {
+    longitude: 139.767125,
+    latitude: 35.681236,
+    accuracy: 18,
+  };
+  const expected = rewriteWlocResponse(plain, settings).data;
+  const result = rewriteWlocResponse(input, settings);
+
+  assert.deepEqual(result.data, expected);
+  assert.equal(result.compressed, true);
+});
+
+test("Quantumult X request preparation asks the server for an identity body", async () => {
+  const result = await runQuantumultX({
+    request: {
+      url: "https://bluedot.is.autonavi.com/clls/wloc",
+      headers: { "User-Agent": "locationd", "Accept-Encoding": "gzip, br" },
+    },
+  });
+
+  assert.equal(result.headers["User-Agent"], "locationd");
+  assert.equal(result.headers["Accept-Encoding"], "identity");
+});
+
+test("Surge request preparation returns request headers without a response wrapper", async () => {
+  const result = await runSurgeRequest({
+    url: "https://gs-loc.apple.com/clls/wloc",
+    headers: { "accept-encoding": "gzip", "User-Agent": "locationd" },
+  });
+
+  assert.equal(result.response, undefined);
+  assert.equal(result.headers["accept-encoding"], "identity");
+  assert.equal(result.headers["User-Agent"], "locationd");
+});
+
+test("Quantumult X rewrites a gzip WLOC response through its complete script entry", async () => {
+  const plain = syntheticResponse(samplePayload());
+  const compressed = Uint8Array.from(gzipSync(plain));
+  const settings = {
+    mode: "static",
+    longitude: 139.767125,
+    latitude: 35.681236,
+    accuracy: 18,
+  };
+  const expected = rewriteWlocResponse(plain, settings).data;
+  const result = await runQuantumultX({
+    request: { url: "https://bluedot.is.autonavi.com/clls/wloc" },
+    response: {
+      status: 200,
+      headers: {
+        "Content-Encoding": "gzip",
+        "Content-Length": String(compressed.length),
+      },
+      bodyBytes: compressed,
+    },
+    storedSettings: settings,
+  });
+
+  assert.deepEqual(Array.from(new Uint8Array(result.bodyBytes)), expected);
+  assert.equal(result.headers["Content-Encoding"], undefined);
+  assert.equal(result.headers["Content-Length"], undefined);
+  assert.match(result.status, /^HTTP\/1\.1 200 /);
+});
+
+test("Quantumult X inspect preserves gzip bytes and response headers", async () => {
+  const compressed = Uint8Array.from(
+    gzipSync(syntheticResponse(samplePayload())),
+  );
+  const result = await runQuantumultX({
+    request: { url: "https://bluedot.is.autonavi.com/clls/wloc" },
+    response: {
+      status: 200,
+      headers: {
+        "Content-Encoding": "gzip",
+        "Content-Length": String(compressed.length),
+        "X-Origin": "amap",
+      },
+      bodyBytes: compressed,
+    },
+    storedSettings: {
+      mode: "static",
+      diagnosticMode: "inspect",
+      diagnosticOutput: "headers",
+    },
+  });
+
+  assert.deepEqual(
+    Array.from(new Uint8Array(result.bodyBytes)),
+    Array.from(compressed),
+  );
+  assert.equal(result.headers["Content-Encoding"], "gzip");
+  assert.equal(result.headers["Content-Length"], String(compressed.length));
+  assert.equal(result.headers["X-Origin"], "amap");
+  assert.equal(result.headers["X-WLOC-Mode"], "inspect");
 });

@@ -9,8 +9,15 @@ http:
   mitm:
     - "gs-loc.apple.com"
     - "gs-loc-cn.apple.com"
+    - "bluedot.is.autonavi.com"
+    - "bluedot.is.autonavi.com.gds.alibabadns.com"
   script:
-    - match: ^https?:\/\/gs-loc(-cn)?\.apple\.com\/clls\/wloc
+    - match: ^https?:\/\/(?:gs-loc(?:-cn)?\.apple\.com|bluedot\.is\.autonavi\.com(?:\.gds\.alibabadns\.com)?)\/clls\/wloc
+      name: WLOC.Prepare
+      type: request
+      require-body: false
+      timeout: 5
+    - match: ^https?:\/\/(?:gs-loc(?:-cn)?\.apple\.com|bluedot\.is\.autonavi\.com(?:\.gds\.alibabadns\.com)?)\/clls\/wloc
       name: WLOC.Location
       type: response
       require-body: true
@@ -26,6 +33,9 @@ http:
 
 script-providers:
   WLOC.Location:
+    url: https://raw.githubusercontent.com/Yu9191/wloc/refs/heads/main/dist/wloc.js
+    interval: 86400
+  WLOC.Prepare:
     url: https://raw.githubusercontent.com/Yu9191/wloc/refs/heads/main/dist/wloc.js
     interval: 86400
   WLOC.Settings:

@@ -46,7 +46,7 @@ https://raw.githubusercontent.com/Yu9191/wloc/refs/heads/main/modules/wloc.modul
 
 支持苹果地图、高德（含短链，自动跟跳转 + GCJ-02→WGS84 坐标换算）。
 
-> 前提：代理已开 + 模块已启用 + 信任 `gs-loc.apple.com`。选点页面（Worker / Pages）方案仍保留，见下方。
+> 前提：代理已开 + 模块已启用 + 已信任模块声明的 WLOC 域名。选点页面（Worker / Pages）方案仍保留，见下方。
 
 ---
 
@@ -94,6 +94,22 @@ https://raw.githubusercontent.com/Yu9191/wloc/refs/heads/main/modules/wloc.modul
 2. 在选点页面选好位置并储存到设备
 3. 打开定位服务 → 弹出「允许访问位置信息」时选择**「下次询问或在我共享时」**
 4. 打开地图验证
+
+</details>
+
+<details>
+<summary><b>WLOC 域名与压缩兼容</b></summary>
+
+模块同时拦截 Apple 与高德承载的 WLOC 服务：
+
+- `gs-loc.apple.com`
+- `gs-loc-cn.apple.com`
+- `bluedot.is.autonavi.com`
+- `bluedot.is.autonavi.com.gds.alibabadns.com`
+
+每个模块都会先运行请求预处理，把 `Accept-Encoding` 设置为 `identity`，降低不同代理客户端处理压缩响应的差异。若服务端仍返回 gzip，响应脚本会按 gzip 魔数解压后改写；只检查模式则保留原始 gzip 字节和响应头。
+
+Quantumult X 使用同一发布脚本的专用运行分支，处理 `$prefs`、`bodyBytes`、HTTP 状态行和二进制响应输出。
 
 </details>
 
@@ -259,7 +275,7 @@ Pages 和 Workers 功能完全一致，按需选择即可。
 <details>
 <summary><b>注意事项</b></summary>
 
-- 需要 MITM 证书信任 `gs-loc.apple.com` 和 `gs-loc-cn.apple.com`
+- 需要 MITM 证书信任模块列出的 Apple 与高德 WLOC 域名
 - 仅修改网络定位(WiFi/基站)，不影响 GPS 硬件定位
 - iOS 在 GPS 信号强时可能忽略网络定位结果
 - 适用于 WiFi 定位为主的室内场景效果最佳
