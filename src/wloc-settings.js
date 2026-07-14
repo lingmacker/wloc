@@ -662,45 +662,6 @@ class c {
     }
   };
 }
-const ROUTE_PROFILES = {
-  walking: { speed: 1.4, accuracy: 12 },
-  cycling: { speed: 4.2, accuracy: 15 },
-  driving: { speed: 13.9, accuracy: 25 },
-};
-function normalizeRoutePoint(e) {
-  const t = Number(e?.latitude),
-    a = Number(e?.longitude),
-    s = null == e?.altitude || "" === e.altitude ? null : Number(e.altitude);
-  if (
-    !Number.isFinite(t) ||
-    !Number.isFinite(a) ||
-    t < -90 ||
-    t > 90 ||
-    a < -180 ||
-    a > 180 ||
-    (null != s && !Number.isFinite(s))
-  )
-    throw new Error("路线点无效");
-  return { latitude: t, longitude: a, altitude: s };
-}
-function routeDurationSeconds(e, t) {
-  const a = 6371008.8;
-  let s = 0;
-  for (let r = 0; r < e.length - 1; r++) {
-    const n = e[r],
-      i = e[r + 1],
-      o = (n.latitude * Math.PI) / 180,
-      c = (i.latitude * Math.PI) / 180,
-      l = ((i.latitude - n.latitude) * Math.PI) / 180,
-      u = ((i.longitude - n.longitude) * Math.PI) / 180,
-      d =
-        Math.sin(l / 2) ** 2 +
-        Math.cos(o) * Math.cos(c) * Math.sin(u / 2) ** 2;
-    s += 2 * a * Math.atan2(Math.sqrt(d), Math.sqrt(1 - d));
-  }
-  if (!(s > 0)) throw new Error("路线距离必须大于 0");
-  return s / t;
-}
 const n = "wloc_settings",
   i = $request.url || "";
 const l = (function (e) {
@@ -731,15 +692,20 @@ let d;
 if ((t.debug(`[wloc-settings] url=${i}, action=${u}`), "query" === u))
   try {
     const e = c.getItem(n);
-    if (
-      e &&
-      "route" === e.mode &&
-      "running" === e.status &&
-      !e.loop &&
-      (Date.now() - Number(e.startedAt)) / 1000 >=
-        routeDurationSeconds(e.route.map(normalizeRoutePoint), Number(e.speed))
-    ) {
-      ((e.status = "completed"), c.setItem(n, e));
+    if (e && "object" == typeof e && "route" === e.mode) {
+      e.mode = "static";
+      for (const t of [
+        "route",
+        "profile",
+        "speed",
+        "loop",
+        "status",
+        "startedAt",
+        "pausedAt",
+        "stoppedAt",
+      ])
+        delete e[t];
+      c.setItem(n, e);
     }
     e &&
     "object" == typeof e &&
@@ -762,27 +728,8 @@ if ((t.debug(`[wloc-settings] url=${i}, action=${u}`), "query" === u))
   } catch (e) {
     d = { success: !1, error: e.message || "读取失败" };
   }
-else if (["pause", "resume", "stop"].includes(u))
-  try {
-    const e = c.getItem(n);
-    if (!e || "object" != typeof e || "route" !== e.mode)
-      throw new Error("无运行中的路线");
-    const a = Date.now();
-    if ("pause" === u && "running" === e.status)
-      ((e.status = "paused"), (e.pausedAt = a));
-    else if ("resume" === u && "paused" === e.status) {
-      const t = e.pausedAt;
-      Number.isFinite(Number(t)) &&
-        (e.startedAt = Number(e.startedAt) + (a - Number(t)));
-      ((e.status = "running"), (e.pausedAt = null), (e.stoppedAt = null));
-    } else if ("stop" === u)
-      ((e.status = "stopped"), (e.stoppedAt = a));
-    ((e.updatedAt = new Date(a + 288e5).toISOString().replace("Z", "+08:00")),
-      c.setItem(n, e),
-      (d = { success: !0, settings: e }));
-  } catch (e) {
-    d = { success: !1, error: e.message || "路线控制失败" };
-  }
+else if (["start", "pause", "resume", "stop"].includes(u) || "route" === l.get("mode"))
+  d = { success: !1, error: "路线模拟功能已移除" };
 else if ("clear" === u)
   try {
     (c.setItem(n, null),
@@ -830,51 +777,7 @@ else {
     diagnosticOutput = ["both", "headers", "logs"].includes(requestedDiagnosticOutput)
       ? requestedDiagnosticOutput
       : "both";
-  if ("route" === l.get("mode") || "start" === u) {
-    try {
-      const e = JSON.parse(l.get("route") || "[]").map(normalizeRoutePoint),
-        profile = ["walking", "cycling", "driving"].includes(l.get("profile"))
-          ? l.get("profile")
-          : "custom",
-        a = Number(l.get("speed") || ROUTE_PROFILES[profile]?.speed),
-        start = e[0];
-      if (!Array.isArray(e) || e.length < 2) throw new Error("路线至少需要两个点");
-      if (!Number.isFinite(a) || a <= 0) throw new Error("路线速度必须大于 0");
-      routeDurationSeconds(e, a);
-      const r = {
-        mode: "route",
-        route: e,
-        profile,
-        speed: a,
-        loop: ["true", "1", "yes", "on"].includes(
-          String(l.get("loop") || "false").toLowerCase(),
-        ),
-        status: "running",
-        startedAt: Date.now(),
-        pausedAt: null,
-        stoppedAt: null,
-        longitude: Number(start.longitude),
-        latitude: Number(start.latitude),
-        accuracy: l.has("acc") || l.has("accuracy")
-          ? s
-          : (ROUTE_PROFILES[profile]?.accuracy ?? 25),
-        altitude,
-        verticalAccuracy,
-        motionActivityType,
-        motionActivityConfidence,
-        diagnosticMode,
-        diagnosticOutput,
-        updatedAt: new Date(Date.now() + 288e5)
-          .toISOString()
-          .replace("Z", "+08:00"),
-      };
-      c.setItem(n, r)
-        ? (d = { success: !0, settings: r })
-        : (d = { success: !1, error: "Storage.setItem 返回 false" });
-    } catch (e) {
-      d = { success: !1, error: e.message || "路线保存失败" };
-    }
-  } else if (
+  if (
     hasLongitude &&
     hasLatitude &&
     Number.isFinite(e) &&

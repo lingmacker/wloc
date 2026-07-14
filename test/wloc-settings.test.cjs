@@ -64,7 +64,7 @@ test("optional settings round-trip zero and null values", () => {
   assert.equal(queried.settings.diagnosticMode, "inspect");
 });
 
-test("route controls preserve elapsed progress across pause and resume", () => {
+test("rejects removed route simulation requests without persisting", () => {
   const values = new Map();
   const route = encodeURIComponent(
     JSON.stringify([
@@ -72,99 +72,42 @@ test("route controls preserve elapsed progress across pause and resume", () => {
       { latitude: 35.658581, longitude: 139.745433, altitude: 30 },
     ]),
   );
-  const started = runSettings(
+  const result = runSettings(
     `https://gs-loc.apple.com/wloc-settings/save?mode=route&route=${route}&profile=walking&loop=false&diagnosticMode=rewrite&diagnosticOutput=logs`,
     values,
     1_000,
   );
-  assert.equal(started.success, true);
-  assert.equal(started.settings.mode, "route");
-  assert.equal(started.settings.status, "running");
-  assert.equal(started.settings.startedAt, 1_000);
-  assert.equal(started.settings.profile, "walking");
-  assert.equal(started.settings.speed, 1.4);
-  assert.equal(started.settings.accuracy, 12);
-  assert.equal(started.settings.diagnosticMode, "rewrite");
-  assert.equal(started.settings.diagnosticOutput, "logs");
-
-  const paused = runSettings(
-    "https://gs-loc.apple.com/wloc-settings/save?action=pause",
-    values,
-    6_000,
-  );
-  assert.equal(paused.settings.status, "paused");
-  assert.equal(paused.settings.pausedAt, 6_000);
-
-  const resumed = runSettings(
-    "https://gs-loc.apple.com/wloc-settings/save?action=resume",
-    values,
-    16_000,
-  );
-  assert.equal(resumed.settings.status, "running");
-  assert.equal(resumed.settings.startedAt, 11_000);
-  assert.equal(resumed.settings.pausedAt, null);
-
-  const stopped = runSettings(
-    "https://gs-loc.apple.com/wloc-settings/save?action=stop",
-    values,
-    20_000,
-  );
-  assert.equal(stopped.settings.status, "stopped");
-  assert.equal(stopped.settings.stoppedAt, 20_000);
-
-  const resumeStopped = runSettings(
-    "https://gs-loc.apple.com/wloc-settings/save?action=resume",
-    values,
-    25_000,
-  );
-  assert.equal(resumeStopped.settings.status, "stopped");
-
-  const queried = runSettings(
-    "https://gs-loc.apple.com/wloc-settings/save?action=query",
-    values,
-    30_000,
-  );
-  assert.equal(queried.settings.route.length, 2);
-  assert.equal(queried.settings.status, "stopped");
-});
-
-test("rejects an invalid later route point before persisting", () => {
-  const values = new Map();
-  const route = encodeURIComponent(
-    JSON.stringify([
-      { latitude: 35.681236, longitude: 139.767125 },
-      { latitude: "invalid", longitude: 139.745433 },
-    ]),
-  );
-  const result = runSettings(
-    `https://gs-loc.apple.com/wloc-settings/save?action=start&mode=route&route=${route}&profile=walking`,
-    values,
-    1_000,
-  );
   assert.equal(result.success, false);
+  assert.equal(result.error, "路线模拟功能已移除");
   assert.equal(values.has("wloc_settings"), false);
 });
 
-test("reports a non-looping route as completed after its duration", () => {
-  const values = new Map();
-  const route = encodeURIComponent(
-    JSON.stringify([
-      { latitude: 0, longitude: 0 },
-      { latitude: 0, longitude: 0.001 },
-    ]),
-  );
-  const started = runSettings(
-    `https://gs-loc.apple.com/wloc-settings/save?action=start&mode=route&route=${route}&speed=1&loop=false`,
-    values,
-    1_000,
-  );
-  assert.equal(started.success, true);
+test("migrates previously saved routes to a static location", () => {
+  const values = new Map([
+    [
+      "wloc_settings",
+      JSON.stringify({
+        mode: "route",
+        route: [
+          { latitude: 35.681236, longitude: 139.767125 },
+          { latitude: 35.658581, longitude: 139.745433 },
+        ],
+        longitude: 139.767125,
+        latitude: 35.681236,
+        speed: 1.4,
+        status: "running",
+      }),
+    ],
+  ]);
   const queried = runSettings(
     "https://gs-loc.apple.com/wloc-settings/save?action=query",
     values,
-    200_000,
   );
-  assert.equal(queried.settings.status, "completed");
+  assert.equal(queried.success, true);
+  assert.equal(queried.settings.mode, "static");
+  assert.equal("route" in queried.settings, false);
+  assert.equal("speed" in queried.settings, false);
+  assert.equal("status" in queried.settings, false);
 });
 
 test("accepts zero latitude and longitude", () => {

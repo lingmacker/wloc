@@ -49,8 +49,6 @@ body { font-family:-apple-system,system-ui,"SF Pro","Helvetica Neue",sans-serif;
 .fav-item .fav-del { flex:none; width:28px; height:28px; border:none; border-radius:50%; background:transparent; color:var(--red); font-size:16px; cursor:pointer; display:flex; align-items:center; justify-content:center; transition:background .15s; }
 .fav-item .fav-del:hover { background:rgba(255,59,48,.1); }
 .fav-empty { text-align:center; color:var(--gray); font-size:13px; padding:16px 0; }
-.route-list { font-size:12px; color:#333; margin-top:8px; max-height:120px; overflow-y:auto; }
-.route-item { display:flex; justify-content:space-between; gap:8px; padding:6px 8px; background:var(--bg); border-radius:6px; margin-top:4px; }
 .fav-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; }
 .fav-header h3 { margin-bottom:0; }
 .modal-overlay { position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,.4); z-index:10000; display:none; align-items:center; justify-content:center; padding:20px; }
@@ -117,32 +115,15 @@ body { font-family:-apple-system,system-ui,"SF Pro","Helvetica Neue",sans-serif;
     </div>
   </div>
   <div class="card">
-    <h3>路线模拟</h3>
-    <div class="active-loc"><div class="value" id="routeStatus">未启动路线</div></div>
+    <h3>诊断设置</h3>
     <div class="input-row">
-      <select id="routeProfile" onchange="applyRouteProfile()" style="padding:10px;border:1px solid #d1d1d6;border-radius:8px">
-        <option value="walking">步行</option><option value="cycling">骑行</option><option value="driving">驾车</option><option value="custom">自定义</option>
-      </select>
-      <input id="routeSpeed" type="number" min="0.1" step="0.1" value="1.4" placeholder="速度 m/s" />
-      <label style="display:flex;align-items:center;gap:5px;font-size:13px"><input id="routeLoop" type="checkbox" />循环</label>
-      <select id="routeDiagnosticMode" style="padding:10px;border:1px solid #d1d1d6;border-radius:8px">
+      <select id="diagnosticMode" style="flex:1;padding:10px;border:1px solid #d1d1d6;border-radius:8px">
         <option value="off">诊断关闭</option><option value="rewrite">改写诊断</option><option value="inspect">只检查</option>
       </select>
-      <select id="routeDiagnosticOutput" style="padding:10px;border:1px solid #d1d1d6;border-radius:8px">
+      <select id="diagnosticOutput" style="flex:1;padding:10px;border:1px solid #d1d1d6;border-radius:8px">
         <option value="both">响应头 + 日志</option><option value="headers">仅响应头</option><option value="logs">仅日志</option>
       </select>
     </div>
-    <div class="row">
-      <button class="btn btn-secondary" onclick="addRoutePoint()">添加当前点</button>
-      <button class="btn btn-secondary" onclick="clearRoutePoints()">清空路线</button>
-      <button class="btn btn-primary" onclick="startRoute()">启动路线</button>
-    </div>
-    <div class="row">
-      <button class="btn btn-sm btn-secondary" onclick="controlRoute('pause')">暂停</button>
-      <button class="btn btn-sm btn-secondary" onclick="controlRoute('resume')">继续</button>
-      <button class="btn btn-sm btn-danger" onclick="controlRoute('stop')">停止</button>
-    </div>
-    <div id="routeList" class="route-list"></div>
   </div>
   <div class="card">
     <h3>粘贴地图链接</h3>
@@ -179,8 +160,6 @@ const FAV_KEY = 'wloc_favorites';
 let lat = 22.544577, lon = 113.94114;
 let selected = false;
 let activeLon = null, activeLat = null;
-let routePoints = [];
-let routeLine = null;
 
 const map = L.map('map').setView([lat, lon], 13);
 const tiles = {
@@ -213,78 +192,6 @@ function setPos(newLat, newLon) {
 function moveTo(newLat, newLon, zoom) {
   setPos(newLat, newLon);
   map.setView([lat, lon], zoom || 15);
-}
-
-function renderRoute() {
-  const el = document.getElementById('routeList');
-  el.innerHTML = routePoints.length ? routePoints.map((p, i) =>
-    '<div class="route-item"><span>' + (i + 1) + '. ' + p.longitude.toFixed(6) + ', ' + p.latitude.toFixed(6) + '</span>' +
-    '<button class="fav-del" onclick="removeRoutePoint(' + i + ')">\u00d7<\/button><\/div>'
-  ).join('') : '<div class="fav-empty">至少添加两个路线点</div>';
-  if (routeLine) map.removeLayer(routeLine);
-  routeLine = routePoints.length > 1 ? L.polyline(routePoints.map(p => [p.latitude, p.longitude]), {color:'#007aff', weight:4}).addTo(map) : null;
-}
-
-function addRoutePoint() {
-  if (!selected) return toast('请先在地图上选择位置');
-  routePoints.push({ latitude:lat, longitude:lon });
-  renderRoute();
-  toast('已添加路线点 ' + routePoints.length);
-}
-
-function removeRoutePoint(i) {
-  routePoints.splice(i, 1);
-  renderRoute();
-}
-
-function clearRoutePoints() {
-  routePoints = [];
-  renderRoute();
-}
-
-function applyRouteProfile() {
-  const profile = document.getElementById('routeProfile').value;
-  const speeds = {walking:1.4, cycling:4.2, driving:13.9};
-  if (speeds[profile]) document.getElementById('routeSpeed').value = speeds[profile];
-}
-
-async function startRoute() {
-  if (routePoints.length < 2) return toast('路线至少需要两个点');
-  const speed = parseFloat(document.getElementById('routeSpeed').value);
-  if (!(speed > 0)) return toast('速度必须大于 0');
-  const loop = document.getElementById('routeLoop').checked;
-  const profile = document.getElementById('routeProfile').value;
-  const diagnosticMode = document.getElementById('routeDiagnosticMode').value;
-  const diagnosticOutput = document.getElementById('routeDiagnosticOutput').value;
-  try {
-    const u = SAVE_API + '?action=start&mode=route&route=' + encodeURIComponent(JSON.stringify(routePoints)) + '&profile=' + profile + '&speed=' + speed + '&loop=' + loop + '&diagnosticMode=' + diagnosticMode + '&diagnosticOutput=' + diagnosticOutput;
-    const d = await fetch(u, {method:'GET', mode:'cors', cache:'no-store'}).then(r => r.json());
-    if (!d.success) throw new Error(d.error || '启动失败');
-    updateRouteStatus(d.settings);
-    toast('路线已启动');
-  } catch(e) { toast('路线启动失败: ' + e.message, 3500); }
-}
-
-async function controlRoute(action) {
-  try {
-    const d = await fetch(SAVE_API + '?action=' + action, {method:'GET', mode:'cors', cache:'no-store'}).then(r => r.json());
-    if (!d.success) throw new Error(d.error || '操作失败');
-    updateRouteStatus(d.settings);
-    toast({pause:'路线已暂停', resume:'路线已继续', stop:'路线已停止'}[action]);
-  } catch(e) { toast('路线操作失败: ' + e.message, 3500); }
-}
-
-function updateRouteStatus(settings) {
-  const el = document.getElementById('routeStatus');
-  if (!settings || settings.mode !== 'route') { el.textContent = '未启动路线'; return; }
-  el.textContent = '状态 ' + settings.status + ' · ' + settings.route.length + ' 个点 · ' + settings.speed + ' m/s' + (settings.loop ? ' · 循环' : '');
-  if (settings.profile) document.getElementById('routeProfile').value = settings.profile;
-  document.getElementById('routeSpeed').value = settings.speed;
-  document.getElementById('routeLoop').checked = Boolean(settings.loop);
-  document.getElementById('routeDiagnosticMode').value = settings.diagnosticMode || (settings.inspectMode ? 'inspect' : settings.diagnostics ? 'rewrite' : 'off');
-  document.getElementById('routeDiagnosticOutput').value = settings.diagnosticOutput || 'both';
-  routePoints = settings.route.map(p => ({latitude:Number(p.latitude), longitude:Number(p.longitude), altitude:p.altitude}));
-  renderRoute();
 }
 
 function toast(msg, ms) {
@@ -390,12 +297,12 @@ function queryActive() {
         activeLat = parseFloat(d.latitude);
         el.textContent = '经度 ' + activeLon.toFixed(6) + '  纬度 ' + activeLat.toFixed(6) + (d.accuracy ? '  精度 ' + d.accuracy + 'm' : '');
         renderFavs();
-        updateRouteStatus(d.settings);
+        document.getElementById('diagnosticMode').value = d.settings.diagnosticMode || (d.settings.inspectMode ? 'inspect' : d.settings.diagnostics ? 'rewrite' : 'off');
+        document.getElementById('diagnosticOutput').value = d.settings.diagnosticOutput || 'both';
       } else {
         activeLon = null; activeLat = null;
         el.textContent = '无已保存的坐标';
         renderFavs();
-        updateRouteStatus(null);
       }
     })
     .catch(() => {
@@ -425,8 +332,8 @@ async function save() {
   btn.textContent = '储存中...'; btn.disabled = true;
   showError(false);
   try {
-    const diagnosticMode = document.getElementById('routeDiagnosticMode').value;
-    const diagnosticOutput = document.getElementById('routeDiagnosticOutput').value;
+    const diagnosticMode = document.getElementById('diagnosticMode').value;
+    const diagnosticOutput = document.getElementById('diagnosticOutput').value;
     const r = await fetch(SAVE_API + '?lon=' + lon + '&lat=' + lat + '&acc=25&diagnosticMode=' + diagnosticMode + '&diagnosticOutput=' + diagnosticOutput, {
       method: 'GET', mode: 'cors', cache: 'no-store'
     });
@@ -514,7 +421,6 @@ document.getElementById('urlInput').addEventListener('keydown', e => { if(e.key=
 document.getElementById('favNameInput').addEventListener('keydown', e => { if(e.key==='Enter') confirmFav(); });
 
 renderFavs();
-renderRoute();
 queryActive();
 <\/script>
 </body>

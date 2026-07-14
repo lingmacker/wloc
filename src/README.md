@@ -34,20 +34,9 @@
 - `prepareWlocRequest`：保留原请求头并将 `Accept-Encoding` 设为 `identity`。
 - `De`：执行完整响应改写流程。
 - `Pe`：合并模块参数和持久化设置，决定改写或透传。
-- `resolveLocationState`：根据路线、速度和请求时间计算一次一致的位置状态。
-- `rewriteWlocResponse`：完整响应的公共改写边界，静态定位和路线模拟共用。
+- `rewriteWlocResponse`：完整响应的公共改写边界。
 
 模块覆盖 Apple 的 `gs-loc(-cn).apple.com` 与高德承载的 `bluedot.is.autonavi.com`（含 Alibaba DNS 别名）。Quantumult X 分支使用 `$prefs` 和 `bodyBytes` 完成请求预处理与二进制响应输出。
-
-## 路线状态
-
-- `pending`：路线开始时间尚未到达。
-- `running`：根据经过时间持续前进。
-- `paused`：冻结在暂停时刻，继续时平移开始时间保持进度连续。
-- `stopped`：冻结在停止时刻。
-- `completed`：非循环路线停在终点。
-
-步行、骑行和驾车档案仅设置默认速度与水平精度，不自动写入语义尚未确认的 protobuf 运动枚举。
 
 ## 安全诊断
 

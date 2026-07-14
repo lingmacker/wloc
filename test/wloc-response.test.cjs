@@ -265,48 +265,6 @@ test("rewrites a complete WLOC response to the configured Tokyo location", () =>
   });
 });
 
-test("uses one time-resolved route state for Wi-Fi and cell locations", () => {
-  const input = syntheticResponse(samplePayload());
-  const result = rewriteWlocResponse(
-    input,
-    {
-      mode: "route",
-      route: [
-        { latitude: 0, longitude: 0, altitude: 10 },
-        { latitude: 0, longitude: 1, altitude: 30 },
-      ],
-      speed: 111195.080234,
-      startedAt: 1_000,
-      status: "running",
-      accuracy: 12,
-      verticalAccuracy: 8,
-      motionActivityType: 1,
-      motionActivityConfidence: 90,
-    },
-    1_500,
-  );
-  const payloadLength = (result.data[8] << 8) | result.data[9];
-  const root = parseFields(result.data.slice(10, 10 + payloadLength));
-  const locations = [
-    child(parseFields(child(root, 2).value), 2).value,
-    child(parseFields(child(root, 22).value), 5).value,
-    child(parseFields(child(root, 24).value), 5).value,
-  ];
-
-  for (const bytes of locations) {
-    const fields = parseFields(bytes);
-    assert.equal(child(fields, 1).value, 0);
-    assert.equal(child(fields, 2).value, 50_000_000);
-    assert.equal(child(fields, 3).value, 12);
-    assert.equal(child(fields, 5).value, 20);
-    assert.equal(child(fields, 6).value, 8);
-    assert.equal(child(fields, 11).value, 1);
-    assert.equal(child(fields, 12).value, 90);
-  }
-  assert.equal(result.locationState.status, "running");
-  assert.ok(Math.abs(result.locationState.progress - 0.5) < 1e-9);
-});
-
 test("preserves optional Apple metadata when settings are unset or invalid", () => {
   const input = syntheticResponse(samplePayload());
   const result = rewriteWlocResponse(input, {
