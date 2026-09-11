@@ -1,13 +1,17 @@
 {
   "type": "module",
   "scripts": {
+    "build": "node scripts/build.mjs",
     "test": "node --test 'test/*.test.mjs'",
-    "dev": "npx wrangler dev",
-    "deploy": "npx wrangler deploy --minify",
-    "pages:dev": "npx wrangler pages dev --port 8787 -c wrangler.pages.jsonc",
-    "pages:deploy": "npx wrangler pages deploy -c wrangler.pages.jsonc"
+    "dev": "wrangler dev",
+    "deploy": "npm run build && wrangler deploy --minify",
+    "pages:dev": "npm run build && wrangler pages dev --cwd pages --port 8787",
+    "pages:deploy": "npm run build && wrangler pages deploy --cwd pages"
   },
   "dependencies": {
     "hono": "^4.10.6"
+  },
+  "devDependencies": {
+    "wrangler": "4.129.0"
   }
 }

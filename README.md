@@ -265,7 +265,7 @@ git clone https://github.com/lingmacker/wloc.git
 cd wloc/worker
 
 # 2. 安装依赖
-npm install
+npm ci
 
 # 3. 登录 Cloudflare（首次需要）
 npx wrangler login
@@ -286,12 +286,13 @@ Pages 部署不支持一键按钮，需要手动执行：
 ```bash
 git clone https://github.com/lingmacker/wloc.git
 cd wloc/worker
-npm install
+npm ci
 npm run pages:deploy
 ```
 
-> 必须走 `npm run pages:deploy`（它带 `-c wrangler.pages.jsonc`）。直接跑
-> `wrangler pages deploy dist` 会丢掉配置里的 compatibility 设定。
+> 使用 `npm run pages:deploy`：它先生成页面，再通过 `--cwd pages` 加载
+> `worker/pages/wrangler.jsonc` 和 `worker/pages/functions/`。Pages 不支持用
+> `-c` 指定自定义配置文件；独立目录可避免与 Workers 的 `worker/wrangler.jsonc` 混用。
 
 部署时会提示设置 production branch，输入 `main` 即可。部署成功后得到 `https://<项目名>.pages.dev` 地址。
 
@@ -320,8 +321,9 @@ Pages 和 Workers 功能完全一致，按需选择即可。
 - `src/wloc.js` / `src/wloc-settings.js`：响应改写与设备设置 API。
 - `worker/src/page.js`：页面中的海拔、随机方式与经纬度范围配置。
 - `dist/`：模块实际加载的独立脚本；修改 `src/` 后必须重新构建，不能直接把含 `import` 的源文件填入代理模块。
+- `worker/dist/index.html`：由同一份 `worker/src/page.js` 生成的页面产物，包含海拔与随机范围输入；不是根目录 `dist/` 中的代理脚本。
 
-在仓库根目录运行：
+**代理脚本：** 在仓库根目录运行，只生成根目录 `dist/wloc.js` 和 `dist/wloc-settings.js`：
 
 ```bash
 npm ci
@@ -329,7 +331,20 @@ npm run build
 npm test
 ```
 
-构建会把共享逻辑打包进两个 `dist` 脚本，运行时不需要 npm 依赖。测试覆盖协议字段保留、负/零海拔、范围抽样边界、页面配置优先级、设置读写和原有地图解析。更新页面后还需重新部署自己的 Worker / Pages；本地修改不会自动更新公共选点站点。
+**Worker / Pages：** 完全独立于根目录的 `package.json` 和 `node_modules`。可以只复制 `worker/` 目录使用，在该目录内执行：
+
+```bash
+cd worker
+npm ci
+npm run build       # 生成当前目录的 dist/index.html
+npm test
+npm run dev         # 本地 Worker
+# 或 npm run pages:dev
+```
+
+Worker 使用自己的 `package.json` / `package-lock.json` 管理 Hono 和固定版本的 Wrangler，npm 命令直接使用本目录安装的工具，不需要先在仓库根目录安装依赖或构建。`npm run deploy` / `npm run pages:deploy` 会先执行本目录的页面构建。
+
+**页面没有海拔选项时，请核对访问地址和部署版本。** 根目录 `dist/wloc*.js` 更新只影响代理脚本，不能更新已部署的网页。请在 `worker/` 目录内运行 `npm run deploy`（Worker）或 `npm run pages:deploy`（Pages），并访问部署输出的地址。README 和模块中的公共选点地址不会因本地构建而更新。
 
 ---
 
