@@ -39,6 +39,15 @@ body { font-family:-apple-system,system-ui,"SF Pro","Helvetica Neue",sans-serif;
 .input-row { display:flex; gap:8px; margin-top:10px; }
 .input-row input { flex:1; padding:10px 12px; border:1px solid #d1d1d6; border-radius:8px; font-size:14px; outline:none; min-width:0; }
 .input-row input:focus { border-color:var(--blue); }
+.settings-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; margin-top:12px; }
+.settings-field { min-width:0; }
+.settings-field label { display:block; font-size:13px; color:#333; margin-bottom:6px; }
+.settings-field input, .settings-field select { width:100%; min-width:0; min-height:44px; padding:10px 12px; border:1px solid #d1d1d6; border-radius:8px; font:inherit; font-size:16px; background:#fff; color:#333; }
+.settings-field input:focus-visible, .settings-field select:focus-visible { outline:2px solid var(--blue); outline-offset:2px; }
+.settings-help { font-size:12px; color:#666; line-height:1.5; margin-top:6px; }
+.settings-error { font-size:13px; color:#b42318; line-height:1.5; margin-top:10px; overflow-wrap:anywhere; }
+.settings-error:empty { display:none; }
+.btn:disabled { opacity:.6; cursor:wait; }
 .status { font-size:12px; color:var(--gray); margin-top:8px; text-align:center; }
 .error-banner { background:var(--red); color:#fff; padding:14px 16px; border-radius:12px; margin-bottom:12px; font-size:14px; line-height:1.5; display:none; }
 .error-banner b { display:block; margin-bottom:4px; }
@@ -46,7 +55,7 @@ body { font-family:-apple-system,system-ui,"SF Pro","Helvetica Neue",sans-serif;
 .toast.show { opacity:1; }
 .active-loc { background:var(--bg); border-radius:8px; padding:10px 12px; font-size:13px; color:#333; }
 .active-loc .label { font-size:11px; color:var(--gray); margin-bottom:4px; }
-.active-loc .value { font-family:"SF Mono",monospace; font-size:13px; }
+.active-loc .value { font-family:"SF Mono",monospace; font-size:13px; white-space:pre-line; overflow-wrap:anywhere; }
 .fav-list { max-height:240px; overflow-y:auto; }
 .fav-item { display:flex; align-items:center; gap:8px; padding:10px 12px; background:var(--bg); border-radius:8px; margin-bottom:6px; cursor:pointer; transition:background .15s; }
 .fav-item:active { background:#e0e0e5; }
@@ -87,23 +96,59 @@ body { font-family:-apple-system,system-ui,"SF Pro","Helvetica Neue",sans-serif;
 </div>
 </div>
 <div class="panel">
-  <div class="error-banner" id="errorBanner">
-    <b>模块未生效</b>
-    请检查以下配置：<br>
-    1. 已安装并启用 WLOC 定位模块<br>
-    2. MITM 已开启且信任证书<br>
-    3. MITM 主机名包含 gs-loc.apple.com<br>
-    4. 当前网络已走代理
+  <div class="error-banner" id="errorBanner" role="alert">
+    <b id="errorTitle">请求失败</b>
+    <div id="errorDetail"></div>
   </div>
   <div class="card">
     <h3>选择目标位置</h3>
     <div class="coords" id="coords">点击地图或使用下方工具选择位置</div>
-    <div class="input-row" style="margin-top:10px">
-      <label style="font-size:13px;color:var(--gray);display:flex;align-items:center;gap:6px;white-space:nowrap">扰动半径(米)
-        <input id="radiusInput" type="number" min="0" max="5000" step="1" value="0" style="width:80px;flex:none" />
-      </label>
-      <span style="font-size:11px;color:var(--gray);line-height:1.3">每次定位在目标点周围随机偏移，0=关闭</span>
+    <div class="settings-grid">
+      <div class="settings-field">
+        <label for="altitudeInput">海拔（整数米，可选）</label>
+        <input id="altitudeInput" type="text" inputmode="text" placeholder="保留 Apple 原值" aria-describedby="altitudeHelp" />
+      </div>
+      <div class="settings-field">
+        <label for="randomModeInput">随机方式</label>
+        <select id="randomModeInput" onchange="updateRandomMode()" aria-describedby="randomHelp">
+          <option value="fixed">固定位置</option>
+          <option value="radius">半径内随机</option>
+          <option value="bounds">范围内随机</option>
+        </select>
+      </div>
     </div>
+    <div class="settings-help" id="altitudeHelp">海拔留空时保留 Apple 原值，可填写 0 或负整数；仅替换响应中已有的海拔字段。</div>
+    <div id="radiusFields" hidden>
+      <div class="settings-grid">
+        <div class="settings-field">
+          <label for="radiusInput">扰动半径（米）</label>
+          <input id="radiusInput" type="text" inputmode="decimal" value="0" aria-describedby="randomHelp" />
+        </div>
+      </div>
+    </div>
+    <div id="boundsFields" hidden>
+      <div class="settings-grid">
+        <div class="settings-field">
+          <label for="minLatitudeInput">最小纬度（WGS84）</label>
+          <input id="minLatitudeInput" type="text" inputmode="text" placeholder="-90 至 90" aria-describedby="boundsHelp" />
+        </div>
+        <div class="settings-field">
+          <label for="maxLatitudeInput">最大纬度（WGS84）</label>
+          <input id="maxLatitudeInput" type="text" inputmode="text" placeholder="-90 至 90" aria-describedby="boundsHelp" />
+        </div>
+        <div class="settings-field">
+          <label for="minLongitudeInput">最小经度（WGS84）</label>
+          <input id="minLongitudeInput" type="text" inputmode="text" placeholder="-180 至 180" aria-describedby="boundsHelp" />
+        </div>
+        <div class="settings-field">
+          <label for="maxLongitudeInput">最大经度（WGS84）</label>
+          <input id="maxLongitudeInput" type="text" inputmode="text" placeholder="-180 至 180" aria-describedby="boundsHelp" />
+        </div>
+      </div>
+      <div class="settings-help" id="boundsHelp">四边均为 WGS84，与当前底图无关。最小值须不大于最大值（可相等），不支持跨越 180° 经线。无需先选点，保存后显示中心点。</div>
+    </div>
+    <div class="settings-help" id="randomHelp">固定位置不随机；半径与范围随机互斥，不叠加。</div>
+    <div class="settings-error" id="settingsError" role="alert"></div>
     <div class="row">
       <button class="btn btn-primary" id="saveBtn" onclick="save()">储存到设备</button>
       <button class="btn btn-secondary" onclick="addFav()">收藏位置</button>
@@ -118,7 +163,7 @@ body { font-family:-apple-system,system-ui,"SF Pro","Helvetica Neue",sans-serif;
     <div id="favList" class="fav-list"></div>
   </div>
   <div class="card">
-    <h3>当前生效坐标</h3>
+    <h3>当前生效配置</h3>
     <div class="active-loc" id="activeLoc">
       <div class="label">设备持久化数据 (wloc_settings)</div>
       <div class="value" id="activeValue">查询中...</div>
@@ -236,8 +281,133 @@ function toast(msg, ms) {
   setTimeout(() => t.classList.remove('show'), ms || 2500);
 }
 
-function showError(show) {
-  document.getElementById('errorBanner').style.display = show ? 'block' : 'none';
+function showError(message) {
+  document.getElementById('errorDetail').textContent = message || '';
+  document.getElementById('errorBanner').style.display = message ? 'block' : 'none';
+}
+
+function updateRandomMode() {
+  const mode = document.getElementById('randomModeInput').value;
+  document.getElementById('radiusFields').hidden = mode !== 'radius';
+  document.getElementById('boundsFields').hidden = mode !== 'bounds';
+  document.getElementById('settingsError').textContent = '';
+}
+
+function settingNumber(value, label, optional) {
+  if (value == null || String(value).trim() === '') {
+    if (optional) return null;
+    throw new Error('请填写' + label);
+  }
+  const text = String(value).trim().replace(',', '.');
+  if (!/^[+-]?(?:\\d+(?:\\.\\d*)?|\\.\\d+)(?:e[+-]?\\d+)?$/i.test(text) || !Number.isFinite(Number(text))) {
+    throw new Error(label + '必须是完整的有限数字');
+  }
+  return Number(text);
+}
+
+function readSettingsField(id, label, min, max, optional, integer) {
+  const input = document.getElementById(id);
+  try {
+    const value = settingNumber(input.value, label, optional);
+    if (value === null) return value;
+    if (integer && !Number.isSafeInteger(value)) throw new Error(label + '必须是安全范围内的整数米');
+    if (value < min || value > max) throw new Error(label + '须在 ' + min + ' 至 ' + max + ' 之间');
+    return value;
+  } catch (e) {
+    input.focus();
+    throw e;
+  }
+}
+
+function collectSettings() {
+  const mode = document.getElementById('randomModeInput').value;
+  const config = {
+    altitude:readSettingsField('altitudeInput', '海拔', -Number.MAX_SAFE_INTEGER, Number.MAX_SAFE_INTEGER, true, true),
+    randomMode:mode, randomRadius:0,
+    minLatitude:null, maxLatitude:null, minLongitude:null, maxLongitude:null
+  };
+  if (!['fixed', 'radius', 'bounds'].includes(mode)) throw new Error('请选择有效的随机方式');
+  if (mode === 'bounds') {
+    config.minLatitude = readSettingsField('minLatitudeInput', '最小纬度', -90, 90);
+    config.maxLatitude = readSettingsField('maxLatitudeInput', '最大纬度', -90, 90);
+    config.minLongitude = readSettingsField('minLongitudeInput', '最小经度', -180, 180);
+    config.maxLongitude = readSettingsField('maxLongitudeInput', '最大经度', -180, 180);
+    if (config.minLatitude > config.maxLatitude) {
+      document.getElementById('minLatitudeInput').focus();
+      throw new Error('最小纬度不能大于最大纬度');
+    }
+    if (config.minLongitude > config.maxLongitude) {
+      document.getElementById('minLongitudeInput').focus();
+      throw new Error('最小经度不能大于最大经度；不支持跨越 180° 经线');
+    }
+    // 范围模式无需选点；始终以范围中心作显示点，不参与随机采样。
+    config.latitude = (config.minLatitude + config.maxLatitude) / 2;
+    config.longitude = (config.minLongitude + config.maxLongitude) / 2;
+  } else {
+    if (!selected) throw new Error('请先在地图上选择一个位置，或改用经纬度范围内随机');
+    if (!Number.isFinite(lat) || lat < -90 || lat > 90 || !Number.isFinite(lon) || lon < -180 || lon > 180) {
+      throw new Error('所选坐标无效：纬度须在 -90 至 90，经度须在 -180 至 180 之间');
+    }
+    config.latitude = lat;
+    config.longitude = lon;
+    if (mode === 'radius') {
+      config.randomRadius = readSettingsField('radiusInput', '扰动半径', 0, Number.MAX_VALUE);
+    }
+  }
+  return config;
+}
+
+function fillSettings(config) {
+  document.getElementById('altitudeInput').value = config.altitude ?? '';
+  document.getElementById('radiusInput').value = config.randomRadius ?? 0;
+  document.getElementById('randomModeInput').value = config.randomMode || (Number(config.randomRadius) > 0 ? 'radius' : 'fixed');
+  ['minLatitude', 'maxLatitude', 'minLongitude', 'maxLongitude'].forEach(key => {
+    document.getElementById(key + 'Input').value = config[key] ?? '';
+  });
+  updateRandomMode();
+}
+
+function applySettings(config) {
+  activeLon = settingNumber(config.longitude ?? config.lon, '已存经度', true);
+  activeLat = settingNumber(config.latitude ?? config.lat, '已存纬度', true);
+  fillSettings(config);
+  const lines = [];
+  if (activeLon !== null && activeLat !== null) {
+    moveTo(activeLat, activeLon);
+    lines.push('经度 ' + activeLon.toFixed(6) + '  纬度 ' + activeLat.toFixed(6));
+  } else {
+    selected = false;
+    document.getElementById('coords').textContent = '点击地图或使用下方工具选择位置';
+    lines.push('无已保存的坐标');
+  }
+  lines.push('精度 ' + (config.accuracy ?? 25) + 'm  海拔 ' + (config.altitude == null || config.altitude === '' ? '保留 Apple 原值' : config.altitude + 'm'));
+  const mode = document.getElementById('randomModeInput').value;
+  if (mode === 'bounds') {
+    lines.push('范围随机（WGS84，不叠加半径）');
+    lines.push('纬度 ' + config.minLatitude + ' 至 ' + config.maxLatitude);
+    lines.push('经度 ' + config.minLongitude + ' 至 ' + config.maxLongitude);
+  } else {
+    lines.push(mode === 'radius' ? '半径内随机 ' + (config.randomRadius ?? 0) + 'm' : '固定位置（不随机）');
+  }
+  document.getElementById('activeValue').textContent = lines.join('\\n');
+  renderFavs();
+}
+
+async function requestSettings(params) {
+  let response;
+  try {
+    response = await fetch(SAVE_API + '?' + new URLSearchParams(params), { method:'GET', mode:'cors', cache:'no-store' });
+  } catch (e) {
+    throw new Error('无法连接设置接口：' + e.message + '。请检查 WLOC 模块、代理网络与 MITM（gs-loc.apple.com）配置。');
+  }
+  let data;
+  try { data = await response.json(); }
+  catch (e) { throw new Error('设置接口返回非 JSON 数据（HTTP ' + response.status + '），请检查 WLOC 模块是否生效。'); }
+  if (response.ok && params.action === 'query' && data && data.code === 'NO_SAVED_SETTINGS') return data;
+  if (!response.ok || !data || data.success !== true) {
+    throw new Error((data && (data.error || data.message)) || '设置请求失败（HTTP ' + response.status + '）');
+  }
+  return data;
 }
 
 /* ---- Favorites (localStorage) ---- */
@@ -322,72 +492,62 @@ function clearAllFav() {
 }
 
 /* ---- Active location query ---- */
-function queryActive() {
+async function queryActive() {
   const el = document.getElementById('activeValue');
   el.textContent = '查询中...';
-  fetch(SAVE_API + '?action=query', { method:'GET', mode:'cors', cache:'no-store' })
-    .then(r => r.json())
-    .then(d => {
-      if (d.success && d.longitude && d.latitude) {
-        activeLon = parseFloat(d.longitude);
-        activeLat = parseFloat(d.latitude);
-        const rr = d.randomRadius || 0;
-        el.textContent = '经度 ' + activeLon.toFixed(6) + '  纬度 ' + activeLat.toFixed(6) + (d.accuracy ? '  精度 ' + d.accuracy + 'm' : '') + (rr ? '  扰动 ' + rr + 'm' : '');
-        document.getElementById('radiusInput').value = rr;
-        renderFavs();
-      } else {
-        activeLon = null; activeLat = null;
-        el.textContent = '无已保存的坐标';
-        renderFavs();
-      }
-    })
-    .catch(() => {
-      el.textContent = '查询失败 (需要代理模块支持)';
-    });
+  showError('');
+  try {
+    const data = await requestSettings({ action:'query' });
+    applySettings(data.code === 'NO_SAVED_SETTINGS' ? {} : data);
+  } catch (e) {
+    el.textContent = '查询失败：' + e.message;
+    showError(e.message);
+  }
 }
 
-function clearActive() {
-  if (!confirm('确定清除设备上已保存的坐标？清除后将使用模块默认参数或停止修改定位。')) return;
-  fetch(SAVE_API + '?action=clear', { method:'GET', mode:'cors', cache:'no-store' })
-    .then(r => r.json())
-    .then(d => {
-      if (d.success) {
-        activeLon = null; activeLat = null;
-        document.getElementById('activeValue').textContent = '已清除';
-        renderFavs();
-        toast('已清除设备坐标');
-      } else { toast('清除失败: ' + (d.error || ''), 3000); }
-    })
-    .catch(() => { toast('清除失败 - 请检查模块配置', 3000); });
+async function clearActive() {
+  if (!confirm('确定清除设备上已保存的配置？清除后将使用模块默认参数或停止修改定位。')) return;
+  showError('');
+  try {
+    await requestSettings({ action:'clear' });
+    activeLon = null; activeLat = null; selected = false;
+    fillSettings({});
+    document.getElementById('coords').textContent = '点击地图或使用下方工具选择位置';
+    document.getElementById('activeValue').textContent = '已清除';
+    document.getElementById('status').textContent = '选好位置后点击「储存到设备」写入代理工具';
+    renderFavs();
+    toast('已清除设备配置');
+  } catch (e) {
+    showError('清除失败：' + e.message);
+    toast('清除失败：' + e.message, 4000);
+  }
 }
 
 /* ---- Save to device ---- */
 async function save() {
-  if (!selected) { toast('请先在地图上选择一个位置'); return; }
+  showError('');
+  document.getElementById('settingsError').textContent = '';
+  let config;
+  try { config = collectSettings(); }
+  catch (e) {
+    document.getElementById('settingsError').textContent = e.message;
+    return;
+  }
   const btn = document.getElementById('saveBtn');
   btn.textContent = '储存中...'; btn.disabled = true;
-  showError(false);
   try {
-    const radius = parseInt(document.getElementById('radiusInput').value) || 0;
-    const r = await fetch(SAVE_API + '?lon=' + lon + '&lat=' + lat + '&acc=25&randomRadius=' + radius, {
-      method: 'GET', mode: 'cors', cache: 'no-store'
-    });
-    const d = await r.json();
-    if (d.success) {
-      activeLon = lon; activeLat = lat;
-      btn.textContent = '\\u2713 已储存'; btn.className = 'btn btn-primary success';
-      document.getElementById('status').textContent = '\\u2713 已写入: ' + lon.toFixed(6) + ', ' + lat.toFixed(6) + ' \\u00b7 ' + new Date().toLocaleTimeString('zh-CN');
-      document.getElementById('activeValue').textContent = '经度 ' + lon.toFixed(6) + '  纬度 ' + lat.toFixed(6) + '  精度 25m';
-      renderFavs();
-      toast('\\u2713 坐标已写入设备，下次定位生效');
-      setTimeout(() => { btn.textContent='储存到设备'; btn.className='btn btn-primary'; btn.disabled=false; }, 2500);
-    } else {
-      throw new Error(d.error || '写入失败');
-    }
+    const params = {};
+    Object.keys(config).forEach(key => { params[key] = config[key] ?? ''; });
+    const data = await requestSettings(params);
+    applySettings(data);
+    btn.textContent = '\\u2713 已储存'; btn.className = 'btn btn-primary success';
+    document.getElementById('status').textContent = '\\u2713 配置已写入 \\u00b7 ' + new Date().toLocaleTimeString('zh-CN');
+    toast('\\u2713 配置已写入设备，下次定位生效');
+    setTimeout(() => { btn.textContent='储存到设备'; btn.className='btn btn-primary'; btn.disabled=false; }, 2500);
   } catch(e) {
     btn.textContent = '储存到设备'; btn.className = 'btn btn-primary'; btn.disabled = false;
-    showError(true);
-    toast('\\u2717 储存失败 - 请检查模块配置', 4000);
+    showError('储存失败：' + e.message);
+    toast('储存失败：' + e.message, 4000);
   }
 }
 
@@ -471,6 +631,8 @@ async function searchPlace() {
 }
 
 document.addEventListener('paste', e => {
+  // 配置数字与收藏名称的粘贴只更新当前输入，不触发地图坐标解析。
+  if (e.target.id !== 'urlInput' && (e.target.matches('input, textarea, select') || e.target.isContentEditable)) return;
   const text = (e.clipboardData||window.clipboardData).getData('text');
   if (!text) return;
   if (!(text.includes('map') || text.includes('loc') || text.includes('lnglat') || /[0-9]+\\.[0-9]+/.test(text))) return;

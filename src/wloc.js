@@ -1,4 +1,9 @@
-/* wloc.js - Build 2026-08-08 21:31:58 */
+/* WLOC response rewriting. Build the standalone proxy script with npm run build. */
+import {
+  normalizeLocationSettings,
+  selectTargetSettings,
+} from "./location-settings.js";
+
 const runtimePlatform = (() => {
   const hasGlobal = (globalName) => globalName in globalThis;
   switch (true) {
@@ -2992,6 +2997,8 @@ function patchLocationMessage(bytes, settings, stats) {
     2 === field.fieldNo && 0 === field.wireType && (hasLongitude = true);
   }
   if (!hasLatitude || !hasLongitude) return bytes;
+  // GoSpoofer/pb/BSSIDApple.pb.go: Location field 5 is int64 altitude in meters.
+  // Only replace an existing altitude; preserve vertical accuracy and other fields.
   const patchedFields = [];
   for (const field of fields)
     1 === field.fieldNo && 0 === field.wireType
@@ -3008,7 +3015,11 @@ function patchLocationMessage(bytes, settings, stats) {
           )
         : 3 === field.fieldNo && 0 === field.wireType
           ? patchedFields.push(encodeProtobufField(3, 0, settings.accuracy))
-          : patchedFields.push(field.raw);
+          : 5 === field.fieldNo &&
+              0 === field.wireType &&
+              null != settings.altitude
+            ? patchedFields.push(encodeProtobufField(5, 0, settings.altitude))
+            : patchedFields.push(field.raw);
   stats.locations++;
   return concatenateBytes(patchedFields);
 }
@@ -3303,44 +3314,7 @@ async function rewriteWlocResponse(request, response, settings) {
     let decodedBytes = inputBytes;
     isGzip(inputBytes) &&
       (decodedBytes = Array.from(ungzipBody(new Uint8Array(inputBytes))));
-    const targetSettings = (function (settings) {
-        const radiusMeters = Number(settings.randomRadius);
-        if (!Number.isFinite(radiusMeters) || radiusMeters <= 0)
-          return settings;
-        const distanceMeters = Math.sqrt(Math.random()) * radiusMeters,
-          bearingRadians = 2 * Math.random() * Math.PI,
-          angularDistance = distanceMeters / 6378137,
-          latitudeRadians = (settings.latitude * Math.PI) / 180,
-          longitudeRadians = (settings.longitude * Math.PI) / 180,
-          targetLatitudeRadians = Math.asin(
-            Math.sin(latitudeRadians) * Math.cos(angularDistance) +
-              Math.cos(latitudeRadians) *
-                Math.sin(angularDistance) *
-                Math.cos(bearingRadians),
-          ),
-          targetLongitudeRadians =
-            ((longitudeRadians +
-              Math.atan2(
-                Math.sin(bearingRadians) *
-                  Math.sin(angularDistance) *
-                  Math.cos(latitudeRadians),
-                Math.cos(angularDistance) -
-                  Math.sin(latitudeRadians) * Math.sin(targetLatitudeRadians),
-              ) +
-              3 * Math.PI) %
-              (2 * Math.PI)) -
-            Math.PI;
-        return {
-          ...settings,
-          longitude: Number(
-            ((180 * targetLongitudeRadians) / Math.PI).toFixed(8),
-          ),
-          latitude: Number(
-            ((180 * targetLatitudeRadians) / Math.PI).toFixed(8),
-          ),
-          randomDistance: distanceMeters,
-        };
-      })(settings),
+    const targetSettings = selectTargetSettings(settings),
       { data: patchedBytes, stats: stats } = patchWlocBody(
         decodedBytes,
         targetSettings,
@@ -3358,7 +3332,7 @@ async function rewriteWlocResponse(request, response, settings) {
     response.status = 200;
     response.statusCode = 200;
     RuntimeConsole.info(
-      `[wloc] 目标坐标: ${targetSettings.longitude},${targetSettings.latitude} 精度=${targetSettings.accuracy} 扰动=${targetSettings.randomDistance?.toFixed(1) || 0}m patched=${stats.locations}`,
+      `[wloc] 目标坐标: ${targetSettings.longitude},${targetSettings.latitude} 精度=${targetSettings.accuracy} mode=${targetSettings.randomMode} 扰动=${targetSettings.randomDistance?.toFixed(1) || 0}m 海拔=${null == targetSettings.altitude ? "透传" : `${targetSettings.altitude}m（仅替换已有字段）`} patched=${stats.locations}`,
     );
     return response;
   } catch (error) {
@@ -3368,13 +3342,7 @@ async function rewriteWlocResponse(request, response, settings) {
     RuntimeConsole.groupEnd();
   }
 }
-const defaultLocationSettings = {
-  longitude: null,
-  latitude: null,
-  accuracy: 25,
-  randomRadius: 0,
-  logLevel: "info",
-};
+const defaultLocationSettings = normalizeLocationSettings({});
 function loadLocationSettings() {
   const argumentSettings = globalThis.$argument || {},
     savedSettings = (function () {
@@ -3387,36 +3355,36 @@ function loadLocationSettings() {
       }
       return null;
     })(),
-    settings = {
-      ...defaultLocationSettings,
-    };
+    mergedSettings = { ...defaultLocationSettings };
+  for (const key of Object.keys(defaultLocationSettings)) {
+    const value = argumentSettings[key];
+    if (null != value && !("string" == typeof value && !value.trim()))
+      mergedSettings[key] = value;
+  }
+  if (argumentSettings.LogLevel)
+    mergedSettings.logLevel = argumentSettings.LogLevel;
   if (
-    (argumentSettings.longitude &&
-      (settings.longitude = parseFloat(argumentSettings.longitude)),
-    argumentSettings.latitude &&
-      (settings.latitude = parseFloat(argumentSettings.latitude)),
-    argumentSettings.accuracy &&
-      (settings.accuracy = parseInt(argumentSettings.accuracy, 10)),
-    void 0 !== argumentSettings.randomRadius &&
-      (settings.randomRadius = parseFloat(argumentSettings.randomRadius)),
-    argumentSettings.logLevel &&
-      (settings.logLevel = argumentSettings.logLevel),
-    argumentSettings.LogLevel &&
-      (settings.logLevel = argumentSettings.LogLevel),
-    savedSettings)
-  ) {
-    savedSettings.longitude &&
-      (settings.longitude = parseFloat(savedSettings.longitude));
-    savedSettings.latitude &&
-      (settings.latitude = parseFloat(savedSettings.latitude));
-    savedSettings.accuracy &&
-      (settings.accuracy = parseInt(savedSettings.accuracy, 10));
-    void 0 !== savedSettings.randomRadius &&
-      (settings.randomRadius = parseFloat(savedSettings.randomRadius));
+    null == argumentSettings.randomMode ||
+    ("string" == typeof argumentSettings.randomMode &&
+      !argumentSettings.randomMode.trim())
+  )
+    mergedSettings.randomMode = "";
+  if (savedSettings) {
+    Object.assign(mergedSettings, savedSettings);
+    if (
+      Object.prototype.hasOwnProperty.call(savedSettings, "randomRadius") &&
+      !Object.prototype.hasOwnProperty.call(savedSettings, "randomMode")
+    )
+      mergedSettings.randomMode = "";
+  }
+  // Validate only after precedence is resolved; invalid settings fail open upstream.
+  const settings = normalizeLocationSettings(mergedSettings);
+  if (savedSettings) {
     RuntimeConsole.info(
       `[settings] 使用已保存坐标: ${settings.longitude},${settings.latitude}`,
     );
   } else if (
+    "bounds" !== settings.randomMode &&
     113.94114 === settings.longitude &&
     22.544577 === settings.latitude
   ) {
@@ -3430,7 +3398,7 @@ function loadLocationSettings() {
   null == settings.longitude || null == settings.latitude
     ? RuntimeConsole.info("[settings] 透传模式：未设置坐标，将不修改定位响应")
     : RuntimeConsole.debug(
-        `[settings] lon=${settings.longitude} lat=${settings.latitude} acc=${settings.accuracy} randomRadius=${settings.randomRadius}`,
+        `[settings] lon=${settings.longitude} lat=${settings.latitude} acc=${settings.accuracy} mode=${settings.randomMode} randomRadius=${settings.randomRadius} altitude=${settings.altitude}`,
       );
   return settings;
 }

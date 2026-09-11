@@ -1,4 +1,6 @@
-/* wloc-settings.js - Build 2026-08-16 16:56:29 */
+/* Device location settings API. Build the standalone proxy script with npm run build. */
+import { normalizeLocationSettings } from "./location-settings.js";
+
 const runtimePlatform = (() => {
   const hasGlobal = (globalName) => globalName in globalThis;
   switch (true) {
@@ -797,9 +799,6 @@ class PersistentStorage {
 }
 const settingsStorageKey = "wloc_settings",
   requestUrl = $request.url || "";
-function parseCoordinate(value) {
-  return parseFloat(String(value || "0").replace(",", "."));
-}
 const queryParameters = (function (url) {
     const queryString = url.split("?")[1] || "",
       parameters = new Map();
@@ -835,34 +834,33 @@ if (
 )
   try {
     const savedSettings = PersistentStorage.getItem(settingsStorageKey);
-    savedSettings &&
-    "object" == typeof savedSettings &&
-    savedSettings.longitude &&
-    savedSettings.latitude
-      ? ((result = {
-          success: true,
-          longitude: savedSettings.longitude,
-          latitude: savedSettings.latitude,
-          accuracy: savedSettings.accuracy || 25,
-          randomRadius: savedSettings.randomRadius ?? 0,
-          updatedAt: savedSettings.updatedAt || null,
-        }),
-        RuntimeConsole.debug(
-          `[wloc-settings] 查询: ${savedSettings.longitude}, ${savedSettings.latitude}`,
-        ))
-      : (result = {
-          success: false,
-          error: "无已保存的坐标",
-        });
+    if (!savedSettings || "object" !== typeof savedSettings) {
+      const error = new Error("无已保存的坐标");
+      error.code = "NO_SAVED_SETTINGS";
+      throw error;
+    }
+    const settings = normalizeLocationSettings(savedSettings, {
+      requireCoordinates: true,
+    });
+    result = {
+      ...settings,
+      updatedAt: settings.updatedAt || null,
+      success: true,
+    };
+    RuntimeConsole.debug(
+      `[wloc-settings] 查询: ${settings.longitude}, ${settings.latitude}`,
+    );
   } catch (error) {
     result = {
       success: false,
       error: error.message || "读取失败",
+      ...(error.code ? { code: error.code } : {}),
     };
   }
 else if ("clear" === action)
   try {
-    PersistentStorage.setItem(settingsStorageKey, null);
+    if (!PersistentStorage.setItem(settingsStorageKey, null))
+      throw new Error("Storage.setItem 返回 false");
     result = {
       success: true,
     };
@@ -875,71 +873,61 @@ else if ("clear" === action)
     RuntimeConsole.error(`[wloc-settings] 清除失败: ${error.message}`);
   }
 else {
-  const longitude = parseCoordinate(
-      queryParameters.get("lon") || queryParameters.get("longitude"),
-    ),
-    latitude = parseCoordinate(
-      queryParameters.get("lat") || queryParameters.get("latitude"),
-    ),
-    accuracy = parseInt(
-      queryParameters.get("acc") || queryParameters.get("accuracy") || "25",
-      10,
+  try {
+    const savedSettings = PersistentStorage.getItem(settingsStorageKey),
+      previousSettings =
+        savedSettings && "object" === typeof savedSettings ? savedSettings : {},
+      longitudeParameter = queryParameters.has("lon") ? "lon" : "longitude",
+      latitudeParameter = queryParameters.has("lat") ? "lat" : "latitude",
+      hasLongitude = queryParameters.has(longitudeParameter),
+      hasLatitude = queryParameters.has(latitudeParameter);
+    if (hasLongitude !== hasLatitude) throw new Error("缺少 lon/lat 参数");
+    const input = {
+      ...previousSettings,
+      longitude: hasLongitude ? queryParameters.get(longitudeParameter) : null,
+      latitude: hasLatitude ? queryParameters.get(latitudeParameter) : null,
+    };
+    if (queryParameters.has("acc")) input.accuracy = queryParameters.get("acc");
+    else if (queryParameters.has("accuracy"))
+      input.accuracy = queryParameters.get("accuracy");
+    for (const field of [
+      "altitude",
+      "randomRadius",
+      "randomMode",
+      "minLatitude",
+      "maxLatitude",
+      "minLongitude",
+      "maxLongitude",
+      "logLevel",
+    ]) {
+      if (queryParameters.has(field)) input[field] = queryParameters.get(field);
+    }
+    if (
+      queryParameters.has("randomRadius") &&
+      !queryParameters.has("randomMode")
+    )
+      input.randomMode = undefined;
+    const settings = normalizeLocationSettings(input, {
+      requireCoordinates: true,
+    });
+    settings.updatedAt = new Date(Date.now() + 28800000)
+      .toISOString()
+      .replace("Z", "+08:00");
+    if (!PersistentStorage.setItem(settingsStorageKey, settings))
+      throw new Error("Storage.setItem 返回 false");
+    result = {
+      ...settings,
+      success: true,
+    };
+    RuntimeConsole.info(
+      `[wloc-settings] 已保存: ${settings.longitude}, ${settings.latitude}`,
     );
-  if (
-    !Number.isFinite(longitude) ||
-    !Number.isFinite(latitude) ||
-    Math.abs(latitude) > 90 ||
-    Math.abs(longitude) > 180
-  )
+  } catch (error) {
     result = {
       success: false,
-      error: "缺少 lon/lat 参数",
+      error: error.message || "写入失败",
     };
-  else {
-    let previousSettings = {};
-    try {
-      const savedSettings = PersistentStorage.getItem(settingsStorageKey);
-      savedSettings &&
-        "object" == typeof savedSettings &&
-        (previousSettings = savedSettings);
-    } catch {}
-    const settings = {
-        ...previousSettings,
-        longitude: longitude,
-        latitude: latitude,
-        accuracy: accuracy,
-        updatedAt: new Date(Date.now() + 28800000)
-          .toISOString()
-          .replace("Z", "+08:00"),
-      },
-      randomRadiusParameter = queryParameters.get("randomRadius");
-    null != randomRadiusParameter &&
-      "" !== randomRadiusParameter &&
-      (settings.randomRadius = parseCoordinate(randomRadiusParameter));
-    try {
-      PersistentStorage.setItem(settingsStorageKey, settings)
-        ? ((result = {
-            success: true,
-            longitude: longitude,
-            latitude: latitude,
-            accuracy: accuracy,
-            randomRadius: settings.randomRadius ?? 0,
-          }),
-          RuntimeConsole.info(
-            `[wloc-settings] 已保存: ${longitude}, ${latitude}`,
-          ))
-        : ((result = {
-            success: false,
-            error: "Storage.setItem 返回 false",
-          }),
-          RuntimeConsole.error("[wloc-settings] setItem 返回 false"));
-    } catch (error) {
-      result = {
-        success: false,
-        error: error.message || "写入失败",
-      };
-      RuntimeConsole.error(`[wloc-settings] ${error.message}`);
-    }
+    RuntimeConsole.error(`[wloc-settings] ${error.message}`);
   }
 }
 const jsonResponse = {

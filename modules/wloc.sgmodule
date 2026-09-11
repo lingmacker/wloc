@@ -3,11 +3,11 @@
 #!author=Yu9191 Rewrite
 #!homepage=https://github.com/lingmacker/wloc
 #!category=Tools
-#!arguments=经度:113.94114, 纬度:22.544577, 精度:25, 扰动半径:0, 日志级别:info
-#!arguments-desc=经度/纬度: 默认坐标(在线选点储存后优先)\n精度: GPS精度(米)\n扰动半径: 每次响应在目标点周围随机偏移的最大距离(米)，0为关闭\n日志级别: off/error/warn/info/debug/all\n\n使用方法: 打开选点页面 -> 选位置 -> 储存到设备
+#!arguments=经度:113.94114, 纬度:22.544577, 精度:25, 海拔:, 随机模式:, 扰动半径:0, 最小纬度:, 最大纬度:, 最小经度:, 最大经度:, 日志级别:info
+#!arguments-desc=经度/纬度: 默认坐标(在线选点储存后优先)\n精度: 水平精度(米)\n海拔: 整数米，可为负，留空保留原值；仅替换已有海拔字段\n随机模式: 留空按半径自动判断，fixed=固定，radius=半径，bounds=经纬度范围\n扰动半径: 米，0关闭；仅radius模式生效\n经纬度上下限: bounds模式须填全，WGS84，最小值不得大于最大值，不跨180度经线\n日志级别: off/error/warn/info/debug/all\n\n使用方法: 打开选点页面 -> 选位置或范围 -> 储存到设备
 
 [Script]
-Apple WLOC = type=http-response, pattern="^https?:\/\/(?:gs-loc(?:-cn)?\.apple\.com|gsp-ssl\.ls\.apple\.com|bluedot\.is\.autonavi\.com(?:\.gds\.alibabadns\.com)?)\/clls\/wloc", requires-body=1, binary-body-mode=1, max-size=0, timeout=30, script-path=https://raw.githubusercontent.com/lingmacker/wloc/refs/heads/main/dist/wloc.js, argument=longitude={{{经度}}}&latitude={{{纬度}}}&accuracy={{{精度}}}&randomRadius={{{扰动半径}}}&logLevel={{{日志级别}}}
+Apple WLOC = type=http-response, pattern="^https?:\/\/(?:gs-loc(?:-cn)?\.apple\.com|gsp-ssl\.ls\.apple\.com|bluedot\.is\.autonavi\.com(?:\.gds\.alibabadns\.com)?)\/clls\/wloc", requires-body=1, binary-body-mode=1, max-size=0, timeout=30, script-path=https://raw.githubusercontent.com/lingmacker/wloc/refs/heads/main/dist/wloc.js, argument=longitude={{{经度}}}&latitude={{{纬度}}}&accuracy={{{精度}}}&altitude={{{海拔}}}&randomMode={{{随机模式}}}&randomRadius={{{扰动半径}}}&minLatitude={{{最小纬度}}}&maxLatitude={{{最大纬度}}}&minLongitude={{{最小经度}}}&maxLongitude={{{最大经度}}}&logLevel={{{日志级别}}}
 WLOC Settings = type=http-request, pattern="^https?:\/\/gs-loc(-cn)?\.apple\.com\/wloc-settings\/save", requires-body=0, max-size=0, timeout=10, script-path=https://raw.githubusercontent.com/lingmacker/wloc/refs/heads/main/dist/wloc-settings.js
 
 [MITM]
